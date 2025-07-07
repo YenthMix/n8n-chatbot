@@ -8,6 +8,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 // Debug logging
 console.log('🔧 Debug: BACKEND_URL =', BACKEND_URL);
 console.log('🔧 Debug: N8N_WEBHOOK_URL =', N8N_WEBHOOK_URL);
+console.log('🔧 Debug: Expected N8N URL should be: https://test-n8n.thenextwilson.ai/webhook/send-message');
 console.log('🔧 Debug: All env vars:', process.env);
 
 export default function Home() {
