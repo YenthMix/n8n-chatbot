@@ -10,15 +10,23 @@ const cors = require('cors');
 
 const app = express();
 
-// Configure CORS to allow your Vercel domain
+// Configure CORS to allow Vercel domains dynamically
 app.use(cors({
-  origin: [
-    'https://n8n-chatbot-psi.vercel.app',
-    'https://n8n-chatbot-713l9v4kk-yenths-projects.vercel.app',
-    'https://n8n-chatbot-e25q0grz3-yenths-projects.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost for development
+    if (origin.includes('localhost')) return callback(null, true);
+    
+    // Allow all Vercel domains for this project
+    if (origin.includes('n8n-chatbot') && (origin.includes('vercel.app') || origin.includes('yenths-projects.vercel.app'))) {
+      return callback(null, true);
+    }
+    
+    // Block other origins
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
