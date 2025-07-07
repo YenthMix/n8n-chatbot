@@ -2,11 +2,12 @@
 import { useState, useEffect } from 'react';
 
 // Load config from environment variables
-const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
+const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 // Debug logging
 console.log('🔧 Debug: BACKEND_URL =', BACKEND_URL);
+console.log('🔧 Debug: N8N_WEBHOOK_URL =', N8N_WEBHOOK_URL);
 console.log('🔧 Debug: All env vars:', process.env);
 
 export default function Home() {
