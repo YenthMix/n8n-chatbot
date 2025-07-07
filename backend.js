@@ -12,7 +12,23 @@ const app = express();
 
 // Configure CORS to allow all origins temporarily for debugging
 app.use(cors({
-  origin: true, // Allow all origins temporarily
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl requests, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Allow all Vercel domains and your local development
+    if (
+      origin.includes('vercel.app') || 
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      origin === 'https://n8n-chatbot-psi.vercel.app'
+    ) {
+      return callback(null, true);
+    }
+    
+    // Allow all origins for now (can be restricted later)
+    return callback(null, true);
+  },
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

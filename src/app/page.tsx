@@ -78,8 +78,8 @@ export default function Home() {
   };
 
   const sendToBotpress = async (userMessage: string) => {
-    if (!conversationId || !userKey) {
-      throw new Error('Not connected to Botpress');
+    if (!conversationId) {
+      throw new Error('Not connected to chat system');
     }
 
     try {
@@ -110,8 +110,8 @@ export default function Home() {
   };
 
   const pollForBotResponse = async () => {
-    if (!conversationId || !userKey) {
-      console.error('Cannot poll - missing conversationId or userKey');
+    if (!conversationId) {
+      console.error('Cannot poll - missing conversationId');
       setIsLoading(false);
       return;
     }
@@ -121,7 +121,7 @@ export default function Home() {
 
     const poll = async () => {
       try {
-        // Check for bot responses from N8N only
+        // Check for bot responses from N8N backend only
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
