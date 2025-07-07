@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
-const BACKEND_URL = process.env.BACKEND_URL || '';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
   const [messages, setMessages] = useState([
@@ -44,7 +44,7 @@ export default function Home() {
 
   const initializeChatAPI = async () => {
     try {
-      const userResponse = await fetch(`${BACKEND_URL}/user`, {
+      const userResponse = await fetch(`${BACKEND_URL}/api/user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,7 +63,7 @@ export default function Home() {
       
       setUserKey(userData.userKey);
       
-      const convResponse = await fetch(`${BACKEND_URL}/conversation`, {
+      const convResponse = await fetch(`${BACKEND_URL}/api/conversation`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ export default function Home() {
 
     const poll = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}/messages?conversationId=${conversationId}&userKey=${encodeURIComponent(userKey)}`);
+        const response = await fetch(`${BACKEND_URL}/api/messages?conversationId=${conversationId}&userKey=${encodeURIComponent(userKey)}`);
 
         if (!response.ok) {
           throw new Error(`Failed to fetch messages: ${response.status}`);
