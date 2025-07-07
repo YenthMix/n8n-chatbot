@@ -5,12 +5,6 @@ import { useState, useEffect } from 'react';
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
-// Debug logging
-console.log('🔧 Debug: BACKEND_URL =', BACKEND_URL);
-console.log('🔧 Debug: N8N_WEBHOOK_URL =', N8N_WEBHOOK_URL);
-console.log('🔧 Debug: Expected N8N URL should be: https://test-n8n.thenextwilson.ai/webhook/send-message');
-console.log('🔧 Debug: All env vars:', process.env);
-
 export default function Home() {
   const [messages, setMessages] = useState([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
@@ -27,26 +21,7 @@ export default function Home() {
     initializeChatAPI();
   }, []);
 
-  // Poll for new bot messages from /api/receive-message every 2 seconds
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch('/api/receive-message');
-        const data = await res.json();
-        if (data.message && !messages.some(m => m.text === data.message && m.isBot)) {
-          const botMessage = {
-            id: `bot-receive-${Date.now()}`,
-            text: data.message,
-            isBot: true
-          };
-          setMessages(prev => [...prev, botMessage]);
-        }
-      } catch (err) {
-        // Optionally handle polling error
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [messages]);
+  // Removed old polling mechanism - now using direct bot response endpoint
 
   const initializeChatAPI = async () => {
     try {
@@ -146,44 +121,28 @@ export default function Home() {
 
     const poll = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/messages?conversationId=${conversationId}&userKey=${encodeURIComponent(userKey)}`);
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch messages: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const allMessages = data.messages || [];
+        // Check for bot responses from N8N only
+        const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
-        const botMessages = allMessages.filter((msg: any) =>
-          userId && msg.userId !== userId && (msg.payload?.text || msg.payload?.Text)
-        );
-        
-        const newBotMessages = botMessages.filter((msg: any) => {
-          const messageId = msg.id || `bot-${msg.timestamp || Date.now()}`;
-          return !displayedMessageIds.has(messageId);
-        });
-
-        if (newBotMessages.length > 0) {
-          newBotMessages.forEach((msg: any) => {
-            const messageId = msg.id || `bot-${msg.timestamp || Date.now()}-${Math.random()}`;
-            const messageText = msg.payload?.text || msg.payload?.Text || 'No text content';
-            
-            if (!displayedMessageIds.has(messageId)) {
-              const botMessage = {
-                id: messageId,
-                text: messageText,
-                isBot: true
-              };
-              setMessages(prev => [...prev, botMessage]);
-              setDisplayedMessageIds(prev => new Set(prev).add(messageId));
-            }
-          });
+        if (botResponseRes.ok) {
+          const botData = await botResponseRes.json();
           
-          setIsLoading(false);
-          return;
+          if (botData.success && botData.response) {
+            console.log('🤖 Received bot response from N8N:', botData.response.text);
+            
+            const botMessage = {
+              id: botData.response.id,
+              text: botData.response.text,
+              isBot: true
+            };
+            
+            setMessages(prev => [...prev, botMessage]);
+            setIsLoading(false);
+            return;
+          }
         }
         
+        // No bot response available yet, try again
         attempts++;
         if (attempts < maxAttempts) {
           setTimeout(poll, 1000);
@@ -196,6 +155,7 @@ export default function Home() {
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
         }
+        
       } catch (error) {
         attempts++;
         

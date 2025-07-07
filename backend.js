@@ -28,6 +28,9 @@ const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 console.log('🤖 Botpress Backend Server Starting...');
 console.log('📡 API_ID:', API_ID);
 
+// Store bot responses temporarily (in production, use Redis or database)
+const botResponses = new Map();
+
 app.post('/api/user', async (req, res) => {
   try {
     const response = await fetch(`${BASE_URL}/users`, {
@@ -122,18 +125,90 @@ app.get('/api/messages', async (req, res) => {
 
 app.post('/api/botpress-webhook', async (req, res) => {
   try {
-    const body = req.body;
-    const { conversationId, type, payload, botpressConversationId } = body;
-    const finalConversationId = conversationId || botpressConversationId;
+    console.log('🔄 Webhook received from N8N:');
+    console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
     
-    if (type === 'text' && payload?.text) {
-      console.log(`Bot response for conversation ${finalConversationId}:`, payload.text);
+    const body = req.body;
+    let conversationId, botText;
+    
+    // Extract data based on the actual N8N structure we see
+    if (body.body && body.body.data) {
+      // N8N sends: { body: { data: { conversationId, payload: { text } } } }
+      conversationId = body.body.data.conversationId;
+      botText = body.body.data.payload?.text;
+    } else if (body.conversationId) {
+      // Direct structure: { conversationId, payload: { text } }
+      conversationId = body.conversationId;
+      botText = body.payload?.text;
+    } else {
+      console.log('❌ Unknown data structure');
     }
     
-    res.json({ success: true, received: true });
+    console.log('🔍 Extracted values:');
+    console.log('  - conversationId:', conversationId);
+    console.log('  - botText:', botText);
+    
+    if (conversationId && botText && !botText.includes('{{ $json')) {
+      console.log(`✅ Bot response received for conversation ${conversationId}:`, botText);
+      
+      // Store the bot response so the frontend can retrieve it
+      botResponses.set(conversationId, {
+        text: botText,
+        timestamp: Date.now(),
+        id: `bot-${Date.now()}`
+      });
+      
+      // Clean up old responses (older than 5 minutes)
+      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      for (const [key, value] of botResponses.entries()) {
+        if (value.timestamp < fiveMinutesAgo) {
+          botResponses.delete(key);
+        }
+      }
+      
+      console.log('💾 Stored bot response for frontend polling');
+    } else {
+      console.log('⚠️ No valid bot response to store');
+    }
+    
+    res.json({ 
+      success: true,
+      conversationId: conversationId,
+      message: 'Bot response received and stored',
+      received: true
+    });
   } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
+    console.error('❌ Webhook error:', error);
+    res.status(500).json({ 
+      error: 'Webhook processing failed',
+      success: false 
+    });
+  }
+});
+
+// New endpoint for frontend to get bot responses
+app.get('/api/bot-response/:conversationId', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const botResponse = botResponses.get(conversationId);
+    
+    if (botResponse) {
+      // Remove the response after sending it to prevent duplicates
+      botResponses.delete(conversationId);
+      console.log(`📤 Sending bot response to frontend for conversation ${conversationId}`);
+      res.json({ 
+        success: true, 
+        response: botResponse 
+      });
+    } else {
+      res.json({ 
+        success: false, 
+        message: 'No bot response available' 
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error getting bot response:', error);
+    res.status(500).json({ error: 'Failed to get bot response' });
   }
 });
 
