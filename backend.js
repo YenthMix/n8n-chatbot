@@ -132,7 +132,7 @@ app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT;
 app.listen(PORT, () => {
   console.log('🚀 Backend server running on port', PORT);
 }); 
