@@ -10,23 +10,9 @@ const cors = require('cors');
 
 const app = express();
 
-// Configure CORS to allow Vercel domains dynamically
+// Configure CORS to allow all origins temporarily for debugging
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Allow localhost for development
-    if (origin.includes('localhost')) return callback(null, true);
-    
-    // Allow all Vercel domains for this project
-    if (origin.includes('n8n-chatbot') && (origin.includes('vercel.app') || origin.includes('yenths-projects.vercel.app'))) {
-      return callback(null, true);
-    }
-    
-    // Block other origins
-    callback(new Error('Not allowed by CORS'));
-  },
+  origin: true, // Allow all origins temporarily
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
