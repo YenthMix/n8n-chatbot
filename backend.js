@@ -15,11 +15,14 @@ app.use(cors({
   origin: [
     'https://n8n-chatbot-psi.vercel.app',
     'https://n8n-chatbot-713l9v4kk-yenths-projects.vercel.app',
+    'https://n8n-chatbot-e25q0grz3-yenths-projects.vercel.app',
     'http://localhost:3000',
     'http://localhost:3001'
   ],
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-key']
 }));
 
 app.use(express.json());
