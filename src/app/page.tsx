@@ -5,6 +5,10 @@ import { useState, useEffect } from 'react';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
+// Debug logging
+console.log('🔧 Debug: BACKEND_URL =', BACKEND_URL);
+console.log('🔧 Debug: All env vars:', process.env);
+
 export default function Home() {
   const [messages, setMessages] = useState([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
