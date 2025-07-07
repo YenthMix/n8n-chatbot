@@ -9,7 +9,19 @@ const fetch = require('node-fetch');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+
+// Configure CORS to allow your Vercel domain
+app.use(cors({
+  origin: [
+    'https://n8n-chatbot-psi.vercel.app',
+    'https://n8n-chatbot-713l9v4kk-yenths-projects.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
+
 app.use(express.json());
 
 // Load secrets from .env file
