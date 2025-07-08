@@ -209,19 +209,42 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
+      console.log('DEBUG: Full webhook body:', JSON.stringify(body, null, 2));
+      
+      // Check if this message matches a user message we've seen
+      const existingUserMessage = userMessages.get(conversationId);
+      const isUserMessageEcho = existingUserMessage && botText.trim() === existingUserMessage.text.trim();
+      
       console.log('DEBUG: Message received:', {
         text: botText,
         isBot: body.isBot,
+        isUserMessageEcho,
+        userMessageExists: !!existingUserMessage,
+        userMessageText: existingUserMessage?.text,
         timestamp: new Date().toISOString()
       });
       
-      // Store message with metadata
-      botResponses.set(conversationId, {
-        text: botText,
-        timestamp: Date.now(),
-        id: `msg-${Date.now()}`,
-        isBot: body.isBot
-      });
+      if (!isUserMessageEcho) {
+        // If no user message stored yet, this might be the user message
+        if (!existingUserMessage) {
+          console.log('DEBUG: Storing as potential user message:', botText);
+          userMessages.set(conversationId, {
+            text: botText,
+            timestamp: Date.now()
+          });
+        } else {
+          // We have a user message, so this must be the bot response
+          console.log('DEBUG: Storing as bot response:', botText);
+          botResponses.set(conversationId, {
+            text: botText,
+            timestamp: Date.now(),
+            id: `msg-${Date.now()}`,
+            isBot: true
+          });
+        }
+      } else {
+        console.log('DEBUG: Ignoring user message echo:', botText);
+      }
       
       // Clean up old responses (older than 5 minutes)
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
@@ -255,7 +278,7 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     if (response) {
       // ONLY return if it's a bot message AND old enough (2 seconds)
       const messageAge = Date.now() - response.timestamp;
-      const isActuallyBot = response.isBot === true || response.isBot === "true";
+      const isActuallyBot = response.isBot === true;
       
       console.log('DEBUG: Checking response:', {
         text: response.text,
