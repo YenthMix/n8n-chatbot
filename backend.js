@@ -202,19 +202,28 @@ app.post('/api/botpress-webhook', async (req, res) => {
     }
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // Get the user message that was sent
       const storedUserMessage = userMessages.get(conversationId);
       
+      console.log('WEBHOOK:', {
+        text: botText,
+        stored: storedUserMessage?.text,
+        different: storedUserMessage ? botText.trim() !== storedUserMessage.text.trim() : 'no stored message'
+      });
+      
       if (storedUserMessage) {
-        // If this message is different from user message, it's the bot response
         if (botText.trim() !== storedUserMessage.text.trim()) {
+          console.log('STORING BOT RESPONSE:', botText);
           botResponses.set(conversationId, {
             text: botText,
             timestamp: Date.now(),
             id: `msg-${Date.now()}`,
             isBot: true
           });
+        } else {
+          console.log('IGNORING USER ECHO:', botText);
         }
+      } else {
+        console.log('NO STORED USER MESSAGE FOR:', conversationId);
       }
     }
     
