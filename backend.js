@@ -209,13 +209,19 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // ONLY store if isBot is true - this is the reliable way to identify bot responses
-      if (body.isBot === true) {
+      // Debug: Log isBot value to see what format it's in
+      console.log('DEBUG: isBot value:', body.isBot, 'type:', typeof body.isBot);
+      
+      // ONLY store if isBot is true - check both boolean and string formats
+      if (body.isBot === true || body.isBot === "true") {
+        console.log('DEBUG: Storing bot response:', botText);
         botResponses.set(conversationId, {
           text: botText,
           timestamp: Date.now(),
           id: `bot-${Date.now()}`
         });
+      } else {
+        console.log('DEBUG: Ignoring message (not bot response)');
       }
       
       // Clean up old responses (older than 5 minutes)
