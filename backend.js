@@ -192,68 +192,35 @@ app.post('/api/botpress-webhook', async (req, res) => {
     
     // Try multiple extraction patterns
     if (body.body && body.body.data) {
-      // N8N sends: { body: { data: { conversationId, payload: { text } } } }
       conversationId = body.body.data.conversationId;
       botText = body.body.data.payload?.text || body.body.data.text;
     } else if (body.conversationId) {
-      // Direct structure: { conversationId, payload: { text } }
       conversationId = body.conversationId;
       botText = body.payload?.text || body.text;
     } else if (body.text) {
-      // Simple text structure
       botText = body.text;
     }
     
-    // Determine if this is a bot response or user message
-    const isUserMessage = body.type === 'text' && body.payload && !body.botpressConversationId;
-    const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
-    
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      console.log('DEBUG: Full webhook body:', JSON.stringify(body, null, 2));
-      
-      // Simple logic: Compare to stored user message
+      // Get the user message that was sent
       const storedUserMessage = userMessages.get(conversationId);
-      const isUserEcho = storedUserMessage && botText.trim() === storedUserMessage.text.trim();
       
-      console.log('DEBUG: Message received:', {
-        text: botText,
-        isUserEcho,
-        storedUserText: storedUserMessage?.text,
-        timestamp: new Date().toISOString()
-      });
-      
-      if (isUserEcho) {
-        console.log('DEBUG: Ignoring user echo:', botText);
-      } else {
-        console.log('DEBUG: Storing bot response:', botText);
-        botResponses.set(conversationId, {
-          text: botText,
-          timestamp: Date.now(),
-          id: `msg-${Date.now()}`,
-          isBot: true
-        });
-      }
-      
-      // Clean up old responses (older than 5 minutes)
-      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-      for (const [key, value] of botResponses.entries()) {
-        if (value.timestamp < fiveMinutesAgo) {
-          botResponses.delete(key);
+      if (storedUserMessage) {
+        // If this message is different from user message, it's the bot response
+        if (botText.trim() !== storedUserMessage.text.trim()) {
+          botResponses.set(conversationId, {
+            text: botText,
+            timestamp: Date.now(),
+            id: `msg-${Date.now()}`,
+            isBot: true
+          });
         }
       }
     }
     
-    res.json({ 
-      success: true,
-      conversationId: conversationId,
-      message: botText,
-      received: true
-    });
+    res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Webhook processing failed',
-      success: false 
-    });
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
