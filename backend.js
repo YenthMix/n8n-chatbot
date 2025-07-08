@@ -45,6 +45,8 @@ const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 // Store bot responses temporarily (in production, use Redis or database)
 const botResponses = new Map();
+// Track user messages to ignore them when they come back from N8N
+const userMessages = new Map();
 
 app.post('/api/user', async (req, res) => {
   try {
@@ -94,6 +96,30 @@ app.post('/api/conversation', async (req, res) => {
   }
 });
 
+// Track user messages so we can ignore them when they come back from N8N
+app.post('/api/track-user-message', async (req, res) => {
+  const { conversationId, text } = req.body;
+  try {
+    // Store user message temporarily (5 minutes)
+    userMessages.set(conversationId, {
+      text: text,
+      timestamp: Date.now()
+    });
+    
+    // Clean up old user messages
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    for (const [key, value] of userMessages.entries()) {
+      if (value.timestamp < fiveMinutesAgo) {
+        userMessages.delete(key);
+      }
+    }
+    
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/message-DISABLED', async (req, res) => {
   const { conversationId, text, userKey } = req.body;
   try {
@@ -124,33 +150,25 @@ app.get('/api/messages', async (req, res) => {
     const storedResponse = botResponses.get(conversationId);
     
     if (storedResponse) {
-      // Only return if the message is at least 1 second old
-      const messageAge = Date.now() - storedResponse.timestamp;
+      // Format it like the old Botpress API response
+      const formattedResponse = {
+        messages: [
+          {
+            id: storedResponse.id,
+            type: 'text',
+            payload: {
+              text: storedResponse.text
+            },
+            userId: 'bot',
+            createdAt: new Date(storedResponse.timestamp).toISOString()
+          }
+        ]
+      };
       
-      if (messageAge >= 1000) {
-        // Format it like the old Botpress API response
-        const formattedResponse = {
-          messages: [
-            {
-              id: storedResponse.id,
-              type: 'text',
-              payload: {
-                text: storedResponse.text
-              },
-              userId: 'bot',
-              createdAt: new Date(storedResponse.timestamp).toISOString()
-            }
-          ]
-        };
-        
-        // Remove the response after sending it
-        botResponses.delete(conversationId);
-        
-        res.json(formattedResponse);
-      } else {
-        // Return empty messages array like old API
-        res.json({ messages: [] });
-      }
+      // Remove the response after sending it
+      botResponses.delete(conversationId);
+      
+      res.json(formattedResponse);
     } else {
       // Return empty messages array like old API
       res.json({ messages: [] });
@@ -184,13 +202,18 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // Simply overwrite - the LAST message received will always be the bot response
-      // Since Botpress sends user message first, then bot response
-      botResponses.set(conversationId, {
-        text: botText,
-        timestamp: Date.now(),
-        id: `bot-${Date.now()}`
-      });
+      // Check if this message matches what the user sent (ignore user messages)
+      const userMessage = userMessages.get(conversationId);
+      const isUserMessage = userMessage && userMessage.text === botText;
+      
+      // Only store if it's NOT a user message
+      if (!isUserMessage) {
+        botResponses.set(conversationId, {
+          text: botText,
+          timestamp: Date.now(),
+          id: `bot-${Date.now()}`
+        });
+      }
       
       // Clean up old responses (older than 5 minutes)
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
@@ -222,23 +245,12 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     const botResponse = botResponses.get(conversationId);
     
     if (botResponse) {
-      // Only return if the message is at least 1 second old
-      // This ensures we get the bot response, not the user message
-      const messageAge = Date.now() - botResponse.timestamp;
-      
-      if (messageAge >= 1000) {
-        // Remove the response after sending it to prevent duplicates
-        botResponses.delete(conversationId);
-        res.json({ 
-          success: true, 
-          response: botResponse 
-        });
-      } else {
-        res.json({ 
-          success: false, 
-          message: 'No bot response available' 
-        });
-      }
+      // Remove the response after sending it to prevent duplicates
+      botResponses.delete(conversationId);
+      res.json({ 
+        success: true, 
+        response: botResponse 
+      });
     } else {
       res.json({ 
         success: false, 

@@ -82,6 +82,19 @@ export default function Home() {
     }
 
     try {
+      // First, track the user message so backend can ignore it when it comes back
+      await fetch(`${BACKEND_URL}/api/track-user-message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId,
+          text: userMessage
+        })
+      });
+
+      // Then send to N8N
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
         headers: {
@@ -169,7 +182,7 @@ export default function Home() {
       }
     };
 
-    setTimeout(poll, 3000);
+    setTimeout(poll, 1000);
   };
 
   const handleSendMessage = async () => {
