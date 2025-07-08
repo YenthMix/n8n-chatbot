@@ -176,22 +176,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // Check if we already have a response for this conversation
-      const existingResponse = botResponses.get(conversationId);
-      
-      // Only store if this is likely a bot response (longer, contains helpful phrases)
-      const isLikelyBotResponse = 
-        botText.length > 100 ||                                    // Longer responses are usually from bot
-        botText.includes('helpen') || botText.includes('Hoe kan') || // Dutch bot phrases
-        botText.includes('Maeconomy') ||                          // Bot mentions system name
-        botText.includes('?') ||                                  // Bot asks questions
-        /[A-Z].*[a-z].*!/.test(botText);                         // Proper sentence structure
-      
-      // If we already have a response, only replace if this one is longer/better
-      const shouldStore = !existingResponse || 
-                         (isLikelyBotResponse && botText.length > (existingResponse.text?.length || 0));
-      
-      if (shouldStore && isLikelyBotResponse) {
+      // Only store if this has botpressConversationId (indicating it's from Botpress, not user)
+      if (body.botpressConversationId) {
         // Store the bot response so the frontend can retrieve it
         botResponses.set(conversationId, {
           text: botText,
