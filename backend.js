@@ -192,8 +192,28 @@ app.post('/api/botpress-webhook', async (req, res) => {
     console.log('  - botpressConversationId present:', !!body.botpressConversationId);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // Only store if this looks like a bot response, not a user message
-      if (body.botpressConversationId || botText.length > 20 || botText.includes('Hallo!') || botText.includes('helpen')) {
+      // Check if we already have a response for this conversation
+      const existingResponse = botResponses.get(conversationId);
+      
+      // Only store if this is likely a bot response (longer, contains helpful phrases)
+      const isLikelyBotResponse = 
+        botText.length > 15 ||                                    // Longer responses are usually from bot
+        botText.includes('helpen') || botText.includes('Hoe kan') || // Dutch bot phrases
+        botText.includes('Maeconomy') ||                          // Bot mentions system name
+        botText.includes('?') ||                                  // Bot asks questions
+        /[A-Z].*[a-z].*!/.test(botText);                         // Proper sentence structure
+      
+      // If we already have a response, only replace if this one is longer/better
+      const shouldStore = !existingResponse || 
+                         (isLikelyBotResponse && botText.length > (existingResponse.text?.length || 0));
+      
+      console.log('🤖 Response analysis:');
+      console.log('  - Text length:', botText.length);
+      console.log('  - isLikelyBotResponse:', isLikelyBotResponse);
+      console.log('  - existingResponse:', !!existingResponse);
+      console.log('  - shouldStore:', shouldStore);
+      
+      if (shouldStore && isLikelyBotResponse) {
         console.log(`✅ Bot response received for conversation ${conversationId}:`, botText);
         
         // Store the bot response so the frontend can retrieve it
@@ -203,17 +223,17 @@ app.post('/api/botpress-webhook', async (req, res) => {
           id: `bot-${Date.now()}`
         });
         
-        // Clean up old responses (older than 5 minutes)
-        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-        for (const [key, value] of botResponses.entries()) {
-          if (value.timestamp < fiveMinutesAgo) {
-            botResponses.delete(key);
-          }
-        }
-        
         console.log('💾 Stored bot response for frontend polling');
       } else {
-        console.log('⚠️ Detected user message, not storing as bot response:', botText);
+        console.log('⚠️ Skipping storage - likely user message or inferior response:', botText);
+      }
+      
+      // Clean up old responses (older than 5 minutes)
+      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      for (const [key, value] of botResponses.entries()) {
+        if (value.timestamp < fiveMinutesAgo) {
+          botResponses.delete(key);
+        }
       }
     } else {
       console.log('⚠️ No valid text to process');

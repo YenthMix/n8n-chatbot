@@ -122,10 +122,12 @@ export default function Home() {
     const poll = async () => {
       try {
         // Check for bot responses from N8N backend only
+        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} for conversation:`, conversationId);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
+          console.log('📡 Backend response:', botData);
           
           if (botData.success && botData.response) {
             console.log('🤖 Received bot response from N8N:', botData.response.text);
@@ -139,7 +141,11 @@ export default function Home() {
             setMessages(prev => [...prev, botMessage]);
             setIsLoading(false);
             return;
+          } else {
+            console.log('⏳ No bot response available yet...');
           }
+        } else {
+          console.log('❌ Backend request failed:', botResponseRes.status);
         }
         
         // No bot response available yet, try again
@@ -173,7 +179,8 @@ export default function Home() {
       }
     };
 
-    setTimeout(poll, 500);
+    console.log('🚀 Starting to poll for bot response in 2 seconds...');
+    setTimeout(poll, 2000);
   };
 
   const handleSendMessage = async () => {
