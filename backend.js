@@ -150,25 +150,33 @@ app.get('/api/messages', async (req, res) => {
     const storedResponse = botResponses.get(conversationId);
     
     if (storedResponse) {
-      // Format it like the old Botpress API response
-      const formattedResponse = {
-        messages: [
-          {
-            id: storedResponse.id,
-            type: 'text',
-            payload: {
-              text: storedResponse.text
-            },
-            userId: 'bot',
-            createdAt: new Date(storedResponse.timestamp).toISOString()
-          }
-        ]
-      };
+      // Only return if message is at least 2 seconds old (ensuring both webhook calls completed)
+      const messageAge = Date.now() - storedResponse.timestamp;
       
-      // Remove the response after sending it
-      botResponses.delete(conversationId);
-      
-      res.json(formattedResponse);
+      if (messageAge >= 2000) {
+        // Format it like the old Botpress API response
+        const formattedResponse = {
+          messages: [
+            {
+              id: storedResponse.id,
+              type: 'text',
+              payload: {
+                text: storedResponse.text
+              },
+              userId: 'bot',
+              createdAt: new Date(storedResponse.timestamp).toISOString()
+            }
+          ]
+        };
+        
+        // Remove the response after sending it
+        botResponses.delete(conversationId);
+        
+        res.json(formattedResponse);
+      } else {
+        // Return empty messages array like old API
+        res.json({ messages: [] });
+      }
     } else {
       // Return empty messages array like old API
       res.json({ messages: [] });
@@ -202,18 +210,12 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // Check if this message matches what the user sent (ignore user messages)
-      const userMessage = userMessages.get(conversationId);
-      const isUserMessage = userMessage && userMessage.text === botText;
-      
-      // Only store if it's NOT a user message
-      if (!isUserMessage) {
-        botResponses.set(conversationId, {
-          text: botText,
-          timestamp: Date.now(),
-          id: `bot-${Date.now()}`
-        });
-      }
+      // Store ALL messages - the LAST one stored will be the bot response
+      botResponses.set(conversationId, {
+        text: botText,
+        timestamp: Date.now(),
+        id: `bot-${Date.now()}`
+      });
       
       // Clean up old responses (older than 5 minutes)
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
@@ -245,12 +247,22 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     const botResponse = botResponses.get(conversationId);
     
     if (botResponse) {
-      // Remove the response after sending it to prevent duplicates
-      botResponses.delete(conversationId);
-      res.json({ 
-        success: true, 
-        response: botResponse 
-      });
+      // Only return if message is at least 2 seconds old (ensuring both webhook calls completed)
+      const messageAge = Date.now() - botResponse.timestamp;
+      
+      if (messageAge >= 2000) {
+        // Remove the response after sending it to prevent duplicates
+        botResponses.delete(conversationId);
+        res.json({ 
+          success: true, 
+          response: botResponse 
+        });
+      } else {
+        res.json({ 
+          success: false, 
+          message: 'No bot response available' 
+        });
+      }
     } else {
       res.json({ 
         success: false, 
