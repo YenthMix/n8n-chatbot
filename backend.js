@@ -99,22 +99,19 @@ app.post('/api/conversation', async (req, res) => {
 app.post('/api/track-user-message', async (req, res) => {
   const { conversationId, text } = req.body;
   try {
+    console.log('TRACKING USER MESSAGE:', { conversationId, text });
+    
     // Store user message temporarily (5 minutes)
     userMessages.set(conversationId, {
       text: text,
       timestamp: Date.now()
     });
     
-    // Clean up old user messages
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    for (const [key, value] of userMessages.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        userMessages.delete(key);
-      }
-    }
+    console.log('USER MESSAGE STORED. Total stored:', userMessages.size);
     
     res.json({ success: true });
   } catch (err) {
+    console.log('ERROR tracking user message:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
