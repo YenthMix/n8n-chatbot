@@ -182,27 +182,41 @@ app.post('/api/botpress-webhook', async (req, res) => {
     console.log('  - conversationId:', conversationId);
     console.log('  - botText:', botText);
     
+    // Determine if this is a bot response or user message
+    const isUserMessage = body.type === 'text' && body.payload && !body.botpressConversationId;
+    const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
+    
+    console.log('🤖 Message type detection:');
+    console.log('  - isUserMessage:', isUserMessage);
+    console.log('  - isBotResponse:', isBotResponse);
+    console.log('  - botpressConversationId present:', !!body.botpressConversationId);
+    
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      console.log(`✅ Bot response received for conversation ${conversationId}:`, botText);
-      
-      // Store the bot response so the frontend can retrieve it
-      botResponses.set(conversationId, {
-        text: botText,
-        timestamp: Date.now(),
-        id: `bot-${Date.now()}`
-      });
-      
-      // Clean up old responses (older than 5 minutes)
-      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-      for (const [key, value] of botResponses.entries()) {
-        if (value.timestamp < fiveMinutesAgo) {
-          botResponses.delete(key);
+      // Only store if this looks like a bot response, not a user message
+      if (body.botpressConversationId || botText.length > 20 || botText.includes('Hallo!') || botText.includes('helpen')) {
+        console.log(`✅ Bot response received for conversation ${conversationId}:`, botText);
+        
+        // Store the bot response so the frontend can retrieve it
+        botResponses.set(conversationId, {
+          text: botText,
+          timestamp: Date.now(),
+          id: `bot-${Date.now()}`
+        });
+        
+        // Clean up old responses (older than 5 minutes)
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        for (const [key, value] of botResponses.entries()) {
+          if (value.timestamp < fiveMinutesAgo) {
+            botResponses.delete(key);
+          }
         }
+        
+        console.log('💾 Stored bot response for frontend polling');
+      } else {
+        console.log('⚠️ Detected user message, not storing as bot response:', botText);
       }
-      
-      console.log('💾 Stored bot response for frontend polling');
     } else {
-      console.log('⚠️ No valid bot response to store');
+      console.log('⚠️ No valid text to process');
     }
     
     res.json({ 
