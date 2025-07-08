@@ -169,7 +169,7 @@ export default function Home() {
       }
     };
 
-    setTimeout(poll, 4000);
+    setTimeout(poll, 5000);
   };
 
   const handleSendMessage = async () => {
