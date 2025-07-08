@@ -121,20 +121,42 @@ app.post('/api/message-DISABLED', async (req, res) => {
   }
 });
 
-app.get('/api/messages-DISABLED', async (req, res) => {
+app.get('/api/messages', async (req, res) => {
   const { conversationId, userKey } = req.query;
   try {
-    const response = await fetch(`${BASE_URL}/conversations/${conversationId}/messages`, {
-      headers: {
-        'accept': 'application/json',
-        'x-user-key': userKey
-      }
-    });
+    console.log('📞 Old frontend calling /api/messages for:', conversationId);
     
-    const data = await response.json();
-    res.json(data);
+    // Check if we have a stored N8N response for this conversation
+    const storedResponse = botResponses.get(conversationId);
+    
+    if (storedResponse) {
+      console.log('✅ Found N8N response, returning it to old frontend');
+      // Format it like the old Botpress API response
+      const formattedResponse = {
+        messages: [
+          {
+            id: storedResponse.id,
+            type: 'text',
+            payload: {
+              text: storedResponse.text
+            },
+            userId: 'bot',
+            createdAt: new Date(storedResponse.timestamp).toISOString()
+          }
+        ]
+      };
+      
+      // Remove the response after sending it
+      botResponses.delete(conversationId);
+      
+      res.json(formattedResponse);
+    } else {
+      console.log('⏳ No N8N response available yet for old frontend');
+      // Return empty messages array like old API
+      res.json({ messages: [] });
+    }
   } catch (err) {
-    console.error('Error fetching messages:', err);
+    console.error('Error in /api/messages compatibility endpoint:', err);
     res.status(500).json({ error: err.message });
   }
 });
