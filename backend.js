@@ -97,7 +97,7 @@ app.post('/api/conversation', async (req, res) => {
   }
 });
 
-app.post('/api/message', async (req, res) => {
+app.post('/api/message-disabled', async (req, res) => {
   const { conversationId, text, userKey } = req.body;
   try {
     const response = await fetch(`${BASE_URL}/messages`, {
@@ -121,7 +121,7 @@ app.post('/api/message', async (req, res) => {
   }
 });
 
-app.get('/api/messages', async (req, res) => {
+app.get('/api/messages-disabled', async (req, res) => {
   const { conversationId, userKey } = req.query;
   try {
     const response = await fetch(`${BASE_URL}/conversations/${conversationId}/messages`, {
@@ -139,7 +139,7 @@ app.get('/api/messages', async (req, res) => {
   }
 });
 
-app.post('/api/botpress-webhook', async (req, res) => {
+app.post('/api/botpress-webhook-disabled', async (req, res) => {
   try {
     console.log('🔄 Webhook received from N8N:');
     console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
