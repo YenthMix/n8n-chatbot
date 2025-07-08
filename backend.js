@@ -44,8 +44,7 @@ const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 
 // Store bot responses temporarily (in production, use Redis or database)
-const botResponses = new Map();
-// Track user messages to ignore them when they come back from N8N
+const botResponses = new Map();// Track user messages to ignore them when they come back from N8N
 const userMessages = new Map();
 
 app.post('/api/user', async (req, res) => {
@@ -210,12 +209,14 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // Store ALL messages - the LAST one stored will be the bot response
-      botResponses.set(conversationId, {
-        text: botText,
-        timestamp: Date.now(),
-        id: `bot-${Date.now()}`
-      });
+      // ONLY store if isBot is true - this is the reliable way to identify bot responses
+      if (body.isBot === true) {
+        botResponses.set(conversationId, {
+          text: botText,
+          timestamp: Date.now(),
+          id: `bot-${Date.now()}`
+        });
+      }
       
       // Clean up old responses (older than 5 minutes)
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
