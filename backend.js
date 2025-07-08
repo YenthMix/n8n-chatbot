@@ -143,21 +143,39 @@ app.post('/api/botpress-webhook', async (req, res) => {
   try {
     console.log('🔄 Webhook received from N8N:');
     console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
+    console.log('📋 Request headers:', JSON.stringify(req.headers, null, 2));
     
     const body = req.body;
     let conversationId, botText;
     
-    // Extract data based on the actual N8N structure we see
+    // Log all possible paths to debug data structure
+    console.log('🔍 Debugging data paths:');
+    console.log('  - body.body:', body.body);
+    console.log('  - body.body?.data:', body.body?.data);
+    console.log('  - body.conversationId:', body.conversationId);
+    console.log('  - body.payload:', body.payload);
+    console.log('  - body.text:', body.text);
+    console.log('  - body.message:', body.message);
+    console.log('  - body.response:', body.response);
+    
+    // Try multiple extraction patterns
     if (body.body && body.body.data) {
       // N8N sends: { body: { data: { conversationId, payload: { text } } } }
       conversationId = body.body.data.conversationId;
-      botText = body.body.data.payload?.text;
+      botText = body.body.data.payload?.text || body.body.data.text;
+      console.log('📍 Using body.body.data pattern');
     } else if (body.conversationId) {
       // Direct structure: { conversationId, payload: { text } }
       conversationId = body.conversationId;
-      botText = body.payload?.text;
+      botText = body.payload?.text || body.text;
+      console.log('📍 Using body.conversationId pattern');
+    } else if (body.text) {
+      // Simple text structure
+      botText = body.text;
+      console.log('📍 Using body.text pattern');
     } else {
-      console.log('❌ Unknown data structure');
+      console.log('❌ Unknown data structure - logging all keys:');
+      console.log('  - Available keys:', Object.keys(body));
     }
     
     console.log('🔍 Extracted values:');
@@ -190,7 +208,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
     res.json({ 
       success: true,
       conversationId: conversationId,
-      message: 'Bot response received and stored',
+      message: botText,
       received: true
     });
   } catch (error) {
@@ -230,6 +248,19 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
 
 app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
+});
+
+// Debug endpoint to see what's stored
+app.get('/api/debug/stored-responses', async (req, res) => {
+  const allResponses = {};
+  for (const [key, value] of botResponses.entries()) {
+    allResponses[key] = value;
+  }
+  res.json({ 
+    totalStored: botResponses.size,
+    responses: allResponses,
+    timestamp: Date.now()
+  });
 });
 
 const PORT = process.env.PORT;
