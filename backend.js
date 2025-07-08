@@ -209,12 +209,18 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
-      // ALWAYS store ALL messages - the MOST RECENT one will be the bot response
-      console.log('DEBUG: Storing message:', botText);
+      console.log('DEBUG: Message received:', {
+        text: botText,
+        isBot: body.isBot,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Store message with metadata
       botResponses.set(conversationId, {
         text: botText,
         timestamp: Date.now(),
-        id: `msg-${Date.now()}`
+        id: `msg-${Date.now()}`,
+        isBot: body.isBot
       });
       
       // Clean up old responses (older than 5 minutes)
@@ -244,29 +250,37 @@ app.post('/api/botpress-webhook', async (req, res) => {
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const botResponse = botResponses.get(conversationId);
+    const response = botResponses.get(conversationId);
     
-    if (botResponse) {
-      // Only return if message is at least 2 seconds old (ensuring both webhook calls completed)
-      const messageAge = Date.now() - botResponse.timestamp;
+    if (response) {
+      // ONLY return if it's a bot message AND old enough (2 seconds)
+      const messageAge = Date.now() - response.timestamp;
+      const isActuallyBot = response.isBot === true || response.isBot === "true";
       
-      if (messageAge >= 2000) {
+      console.log('DEBUG: Checking response:', {
+        text: response.text,
+        isBot: response.isBot,
+        isActuallyBot,
+        age: messageAge
+      });
+      
+      if (isActuallyBot && messageAge >= 2000) {
         // Remove the response after sending it to prevent duplicates
         botResponses.delete(conversationId);
         res.json({ 
           success: true, 
-          response: botResponse 
+          response: response 
         });
       } else {
         res.json({ 
           success: false, 
-          message: 'No bot response available' 
+          message: isActuallyBot ? 'Response too recent' : 'Not a bot message'
         });
       }
     } else {
       res.json({ 
         success: false, 
-        message: 'No bot response available' 
+        message: 'No response available' 
       });
     }
   } catch (error) {
