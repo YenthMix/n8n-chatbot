@@ -139,7 +139,7 @@ app.get('/api/messages-disabled', async (req, res) => {
   }
 });
 
-app.post('/api/botpress-webhook-disabled', async (req, res) => {
+app.post('/api/botpress-webhook', async (req, res) => {
   try {
     console.log('🔄 Webhook received from N8N:');
     console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
