@@ -41,8 +41,7 @@ app.use(express.json());
 const API_ID = process.env.API_ID;
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
-console.log('🤖 Botpress Backend Server Starting...');
-console.log('📡 API_ID:', API_ID);
+
 
 // Store bot responses temporarily (in production, use Redis or database)
 const botResponses = new Map();
@@ -66,7 +65,6 @@ app.post('/api/user', async (req, res) => {
     
     res.json({ user: data.user, userKey: data.key });
   } catch (err) {
-    console.error('Error creating user:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -92,7 +90,6 @@ app.post('/api/conversation', async (req, res) => {
     
     res.json({ conversation: data.conversation });
   } catch (err) {
-    console.error('Error creating conversation:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -116,7 +113,6 @@ app.post('/api/message-DISABLED', async (req, res) => {
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error('Error sending message:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -124,13 +120,10 @@ app.post('/api/message-DISABLED', async (req, res) => {
 app.get('/api/messages', async (req, res) => {
   const { conversationId, userKey } = req.query;
   try {
-    console.log('📞 Old frontend calling /api/messages for:', conversationId);
-    
     // Check if we have a stored N8N response for this conversation
     const storedResponse = botResponses.get(conversationId);
     
     if (storedResponse) {
-      console.log('✅ Found N8N response, returning it to old frontend');
       // Format it like the old Botpress API response
       const formattedResponse = {
         messages: [
@@ -151,67 +144,36 @@ app.get('/api/messages', async (req, res) => {
       
       res.json(formattedResponse);
     } else {
-      console.log('⏳ No N8N response available yet for old frontend');
       // Return empty messages array like old API
       res.json({ messages: [] });
     }
   } catch (err) {
-    console.error('Error in /api/messages compatibility endpoint:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/botpress-webhook', async (req, res) => {
   try {
-    console.log('🔄 Webhook received from N8N:');
-    console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
-    console.log('📋 Request headers:', JSON.stringify(req.headers, null, 2));
-    
     const body = req.body;
     let conversationId, botText;
-    
-    // Log all possible paths to debug data structure
-    console.log('🔍 Debugging data paths:');
-    console.log('  - body.body:', body.body);
-    console.log('  - body.body?.data:', body.body?.data);
-    console.log('  - body.conversationId:', body.conversationId);
-    console.log('  - body.payload:', body.payload);
-    console.log('  - body.text:', body.text);
-    console.log('  - body.message:', body.message);
-    console.log('  - body.response:', body.response);
     
     // Try multiple extraction patterns
     if (body.body && body.body.data) {
       // N8N sends: { body: { data: { conversationId, payload: { text } } } }
       conversationId = body.body.data.conversationId;
       botText = body.body.data.payload?.text || body.body.data.text;
-      console.log('📍 Using body.body.data pattern');
     } else if (body.conversationId) {
       // Direct structure: { conversationId, payload: { text } }
       conversationId = body.conversationId;
       botText = body.payload?.text || body.text;
-      console.log('📍 Using body.conversationId pattern');
     } else if (body.text) {
       // Simple text structure
       botText = body.text;
-      console.log('📍 Using body.text pattern');
-    } else {
-      console.log('❌ Unknown data structure - logging all keys:');
-      console.log('  - Available keys:', Object.keys(body));
     }
-    
-    console.log('🔍 Extracted values:');
-    console.log('  - conversationId:', conversationId);
-    console.log('  - botText:', botText);
     
     // Determine if this is a bot response or user message
     const isUserMessage = body.type === 'text' && body.payload && !body.botpressConversationId;
     const isBotResponse = body.botpressConversationId || (body.payload && body.payload.text && body.payload.text !== body.text);
-    
-    console.log('🤖 Message type detection:');
-    console.log('  - isUserMessage:', isUserMessage);
-    console.log('  - isBotResponse:', isBotResponse);
-    console.log('  - botpressConversationId present:', !!body.botpressConversationId);
     
     if (conversationId && botText && !botText.includes('{{ $json')) {
       // Check if we already have a response for this conversation
@@ -219,7 +181,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
       
       // Only store if this is likely a bot response (longer, contains helpful phrases)
       const isLikelyBotResponse = 
-        botText.length > 15 ||                                    // Longer responses are usually from bot
+        botText.length > 100 ||                                    // Longer responses are usually from bot
         botText.includes('helpen') || botText.includes('Hoe kan') || // Dutch bot phrases
         botText.includes('Maeconomy') ||                          // Bot mentions system name
         botText.includes('?') ||                                  // Bot asks questions
@@ -229,25 +191,13 @@ app.post('/api/botpress-webhook', async (req, res) => {
       const shouldStore = !existingResponse || 
                          (isLikelyBotResponse && botText.length > (existingResponse.text?.length || 0));
       
-      console.log('🤖 Response analysis:');
-      console.log('  - Text length:', botText.length);
-      console.log('  - isLikelyBotResponse:', isLikelyBotResponse);
-      console.log('  - existingResponse:', !!existingResponse);
-      console.log('  - shouldStore:', shouldStore);
-      
       if (shouldStore && isLikelyBotResponse) {
-        console.log(`✅ Bot response received for conversation ${conversationId}:`, botText);
-        
         // Store the bot response so the frontend can retrieve it
         botResponses.set(conversationId, {
           text: botText,
           timestamp: Date.now(),
           id: `bot-${Date.now()}`
         });
-        
-        console.log('💾 Stored bot response for frontend polling');
-      } else {
-        console.log('⚠️ Skipping storage - likely user message or inferior response:', botText);
       }
       
       // Clean up old responses (older than 5 minutes)
@@ -257,8 +207,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
           botResponses.delete(key);
         }
       }
-    } else {
-      console.log('⚠️ No valid text to process');
     }
     
     res.json({ 
@@ -268,7 +216,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
       received: true
     });
   } catch (error) {
-    console.error('❌ Webhook error:', error);
     res.status(500).json({ 
       error: 'Webhook processing failed',
       success: false 
@@ -285,7 +232,6 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     if (botResponse) {
       // Remove the response after sending it to prevent duplicates
       botResponses.delete(conversationId);
-      console.log(`📤 Sending bot response to frontend for conversation ${conversationId}`);
       res.json({ 
         success: true, 
         response: botResponse 
@@ -297,7 +243,6 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('❌ Error getting bot response:', error);
     res.status(500).json({ error: 'Failed to get bot response' });
   }
 });
@@ -321,5 +266,4 @@ app.get('/api/debug/stored-responses', async (req, res) => {
 
 const PORT = process.env.PORT;
 app.listen(PORT, () => {
-  console.log('🚀 Backend server running on port', PORT);
 }); 
