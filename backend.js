@@ -211,39 +211,27 @@ app.post('/api/botpress-webhook', async (req, res) => {
     if (conversationId && botText && !botText.includes('{{ $json')) {
       console.log('DEBUG: Full webhook body:', JSON.stringify(body, null, 2));
       
-      // Check if this message matches a user message we've seen
-      const existingUserMessage = userMessages.get(conversationId);
-      const isUserMessageEcho = existingUserMessage && botText.trim() === existingUserMessage.text.trim();
+      // Simple logic: Compare to stored user message
+      const storedUserMessage = userMessages.get(conversationId);
+      const isUserEcho = storedUserMessage && botText.trim() === storedUserMessage.text.trim();
       
       console.log('DEBUG: Message received:', {
         text: botText,
-        isBot: body.isBot,
-        isUserMessageEcho,
-        userMessageExists: !!existingUserMessage,
-        userMessageText: existingUserMessage?.text,
+        isUserEcho,
+        storedUserText: storedUserMessage?.text,
         timestamp: new Date().toISOString()
       });
       
-      if (!isUserMessageEcho) {
-        // If no user message stored yet, this might be the user message
-        if (!existingUserMessage) {
-          console.log('DEBUG: Storing as potential user message:', botText);
-          userMessages.set(conversationId, {
-            text: botText,
-            timestamp: Date.now()
-          });
-        } else {
-          // We have a user message, so this must be the bot response
-          console.log('DEBUG: Storing as bot response:', botText);
-          botResponses.set(conversationId, {
-            text: botText,
-            timestamp: Date.now(),
-            id: `msg-${Date.now()}`,
-            isBot: true
-          });
-        }
+      if (isUserEcho) {
+        console.log('DEBUG: Ignoring user echo:', botText);
       } else {
-        console.log('DEBUG: Ignoring user message echo:', botText);
+        console.log('DEBUG: Storing bot response:', botText);
+        botResponses.set(conversationId, {
+          text: botText,
+          timestamp: Date.now(),
+          id: `msg-${Date.now()}`,
+          isBot: true
+        });
       }
       
       // Clean up old responses (older than 5 minutes)
