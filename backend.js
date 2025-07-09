@@ -46,8 +46,8 @@ const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 // Store bot responses temporarily (in production, use Redis or database)
 const botResponses = new Map();
 
-// Track user messages to distinguish them from bot responses
-const userMessages = new Map();
+// Store incoming messages temporarily to compare lengths (2 messages per conversation)
+const pendingMessages = new Map();
 
 app.post('/api/user', async (req, res) => {
   try {
@@ -70,28 +70,6 @@ app.post('/api/user', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-// Track user messages before sending to N8N
-app.post('/api/track-user-message', async (req, res) => {
-  const { conversationId, text } = req.body;
-  console.log(`🔵 TRACKING USER MESSAGE: "${text}" for conversation ${conversationId}`);
-  
-  if (!conversationId || !text) {
-    console.log('❌ TRACKING FAILED: Missing conversationId or text');
-    return res.status(400).json({ error: 'Missing conversationId or text' });
-  }
-  
-  // Store user message with timestamp to track what the user actually sent
-  userMessages.set(conversationId, {
-    text: text,
-    timestamp: Date.now()
-  });
-  
-  console.log(`✅ USER MESSAGE TRACKED SUCCESSFULLY. Total tracked: ${userMessages.size}`);
-  console.log(`   Stored: "${text}" for conversation ${conversationId}`);
-  
-  res.json({ success: true });
 });
 
 app.post('/api/conversation', async (req, res) => {
@@ -143,8 +121,8 @@ app.post('/api/message-DISABLED', async (req, res) => {
 });
 
 app.get('/api/messages', async (req, res) => {
-  const { conversationId, userKey } = req.query;
   try {
+    const { conversationId, userKey } = req.query;
     // Check if we have a stored N8N response for this conversation
     const storedResponse = botResponses.get(conversationId);
     
@@ -183,95 +161,90 @@ app.post('/api/botpress-webhook', async (req, res) => {
     console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
     
     const body = req.body;
-    let conversationId, botText;
+    let conversationId, messageText;
     
     // Try multiple extraction patterns
     if (body.body && body.body.data) {
       // N8N sends: { body: { data: { conversationId, payload: { text } } } }
       conversationId = body.body.data.conversationId;
-      botText = body.body.data.payload?.text || body.body.data.text;
+      messageText = body.body.data.payload?.text || body.body.data.text;
       console.log('📍 Using body.body.data pattern');
     } else if (body.conversationId) {
       // Direct structure: { conversationId, payload: { text } }
       conversationId = body.conversationId;
-      botText = body.payload?.text || body.text;
+      messageText = body.payload?.text || body.text;
       console.log('📍 Using body.conversationId pattern');
     } else if (body.text) {
       // Simple text structure
-      botText = body.text;
+      messageText = body.text;
       console.log('📍 Using body.text pattern');
     }
     
-    console.log(`🔍 Extracted: conversationId="${conversationId}", text="${botText}"`);
+    console.log(`🔍 Extracted: conversationId="${conversationId}", text="${messageText}"`);
     
-    // Check if this matches a user message we tracked
-    const trackedUserMessage = userMessages.get(conversationId);
-    console.log(`👤 Tracked user message:`, trackedUserMessage ? `"${trackedUserMessage.text}"` : 'NONE');
-    console.log(`👥 All tracked messages:`, Array.from(userMessages.keys()));
-    
-    let isUserMessage = false;
-    let isBotResponse = false;
-    
-    if (trackedUserMessage && botText === trackedUserMessage.text) {
-      // This exactly matches what the user sent - it's a user message
-      isUserMessage = true;
-      console.log('✅ IDENTIFIED AS USER MESSAGE (exact match with tracked message)');
-    } else if (trackedUserMessage) {
-      // We have a tracked message but text doesn't match - this is a bot response
-      isBotResponse = true;
-      console.log('✅ IDENTIFIED AS BOT RESPONSE (different text from tracked user message)');
-      console.log(`   User sent: "${trackedUserMessage.text}"`);
-      console.log(`   This message: "${botText}"`);
-    } else {
-      // No tracked message found - this could be a bot response or tracking failed
-      // Check some heuristics to determine if this looks like a bot response
-      const looksLikeBotResponse = 
-        botText.length > 20 ||                                    // Longer responses usually from bot
-        botText.includes('!') ||                                  // Exclamation marks common in bot responses
-        botText.includes('?') ||                                  // Questions from bot
-        botText.includes('helpen') || botText.includes('kan ik') || // Dutch bot phrases
-        /[A-Z].*[a-z].*[.!?]/.test(botText);                     // Proper sentence structure
-        
-      if (looksLikeBotResponse) {
-        isBotResponse = true;
-        console.log('✅ IDENTIFIED AS BOT RESPONSE (no tracking found but looks like bot response)');
-        console.log(`   Heuristics: length=${botText.length}, proper structure, contains bot phrases`);
-      } else {
-        isUserMessage = true;
-        console.log('⚠️ IDENTIFIED AS USER MESSAGE (no tracking found and looks like user message)');
-        console.log('   This suggests tracking failed - the user message was not properly tracked');
-      }
-    }
-    
-    if (conversationId && botText && !botText.includes('{{ $json')) {
+    if (conversationId && messageText && !messageText.includes('{{ $json')) {
       
-      if (isUserMessage) {
-        console.log('❌ SKIPPING STORAGE - This is a user message, not storing');
-        // Clean up the tracked user message since we've processed it
-        userMessages.delete(conversationId);
-      } else if (isBotResponse) {
-        console.log(`💾 STORING BOT RESPONSE: "${botText}"`);
+      // Get or create pending messages array for this conversation
+      if (!pendingMessages.has(conversationId)) {
+        pendingMessages.set(conversationId, []);
+      }
+      
+      const messages = pendingMessages.get(conversationId);
+      
+      // Add the new message with timestamp
+      messages.push({
+        text: messageText,
+        timestamp: Date.now(),
+        length: messageText.length
+      });
+      
+      console.log(`📝 Added message (length: ${messageText.length}): "${messageText}"`);
+      console.log(`📊 Total messages for conversation ${conversationId}: ${messages.length}`);
+      
+      // If we have 2 messages, compare lengths and determine bot response
+      if (messages.length >= 2) {
+        console.log('🔍 COMPARING 2 MESSAGES:');
         
-        // Store the bot response so the frontend can retrieve it
+        // Sort messages by length (longest first)
+        const sortedMessages = messages.sort((a, b) => b.length - a.length);
+        
+        const longerMessage = sortedMessages[0];
+        const shorterMessage = sortedMessages[1];
+        
+        console.log(`   Longer message (${longerMessage.length} chars): "${longerMessage.text}"`);
+        console.log(`   Shorter message (${shorterMessage.length} chars): "${shorterMessage.text}"`);
+        
+        // The longer message is always the bot response
+        console.log(`💾 STORING BOT RESPONSE (longer message): "${longerMessage.text}"`);
+        
         botResponses.set(conversationId, {
-          text: botText,
-          timestamp: Date.now(),
-          id: `bot-${Date.now()}`
+          text: longerMessage.text,
+          timestamp: longerMessage.timestamp,
+          id: `bot-${longerMessage.timestamp}`
         });
         
-        console.log('✅ Bot response stored successfully for frontend polling');
+        // Clear pending messages for this conversation
+        pendingMessages.delete(conversationId);
+        
+        console.log('✅ Bot response stored successfully, pending messages cleared');
+      } else {
+        console.log(`⏳ Waiting for second message (have ${messages.length}/2)`);
       }
       
-      // Clean up old responses and user messages (older than 5 minutes)
+      // Clean up old pending messages and bot responses (older than 5 minutes)
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      
+      for (const [key, messageArray] of pendingMessages.entries()) {
+        if (messageArray.length > 0 && messageArray[0].timestamp < fiveMinutesAgo) {
+          pendingMessages.delete(key);
+          console.log(`🧹 Cleaned up old pending messages for conversation: ${key}`);
+        }
+      }
+      
       for (const [key, value] of botResponses.entries()) {
         if (value.timestamp < fiveMinutesAgo) {
           botResponses.delete(key);
-        }
-      }
-      for (const [key, value] of userMessages.entries()) {
-        if (value.timestamp < fiveMinutesAgo) {
-          userMessages.delete(key);
+          console.log(`🧹 Cleaned up old bot response for conversation: ${key}`);
         }
       }
     }
@@ -279,7 +252,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
     res.json({ 
       success: true,
       conversationId: conversationId,
-      message: botText,
+      message: messageText,
       received: true
     });
   } catch (error) {
@@ -322,25 +295,25 @@ app.get('/api/botpress-webhook', async (req, res) => {
 // Debug endpoint to see what's stored
 app.get('/api/debug/stored-responses', async (req, res) => {
   const allResponses = {};
-  const allUserMessages = {};
+  const allPendingMessages = {};
   
   for (const [key, value] of botResponses.entries()) {
     allResponses[key] = value;
   }
   
-  for (const [key, value] of userMessages.entries()) {
-    allUserMessages[key] = value;
+  for (const [key, value] of pendingMessages.entries()) {
+    allPendingMessages[key] = value;
   }
   
   console.log('🔍 DEBUG ENDPOINT CALLED - Current storage state:');
   console.log(`   Bot responses: ${botResponses.size} stored`);
-  console.log(`   User messages: ${userMessages.size} tracked`);
+  console.log(`   Pending messages: ${pendingMessages.size} conversations`);
   
   res.json({ 
     totalBotResponses: botResponses.size,
-    totalUserMessages: userMessages.size,
+    totalPendingConversations: pendingMessages.size,
     botResponses: allResponses,
-    userMessages: allUserMessages,
+    pendingMessages: allPendingMessages,
     timestamp: Date.now()
   });
 });
