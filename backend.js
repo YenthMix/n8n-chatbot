@@ -205,30 +205,14 @@ app.post('/api/botpress-webhook', async (req, res) => {
     }
     
     if (conversationId && incomingText && !incomingText.includes('{{ $json')) {
-      // Check if we already have a user message stored for this conversation
-      const storedUserMsg = userMessages.get(conversationId);
-      
-      if (!storedUserMsg) {
-        // First message = store as user message
-        console.log('STORING USER MESSAGE:', incomingText);
-        userMessages.set(conversationId, {
-          text: incomingText,
-          timestamp: Date.now()
-        });
-      } else {
-        // Compare with stored user message
-        if (incomingText.trim() !== storedUserMsg.text.trim()) {
-          console.log('STORING BOT RESPONSE:', incomingText);
-          botResponses.set(conversationId, {
-            text: incomingText,
-            timestamp: Date.now(),
-            id: `msg-${Date.now()}`,
-            isBot: true
-          });
-        } else {
-          console.log('IGNORING USER ECHO:', incomingText);
-        }
-      }
+      // STORE ALL MESSAGES - let's see everything in the webchat
+      console.log('STORING ALL MESSAGES:', incomingText);
+      botResponses.set(conversationId, {
+        text: incomingText,
+        timestamp: Date.now(),
+        id: `msg-${Date.now()}`,
+        isBot: true
+      });
     }
     
     res.json({ success: true });
