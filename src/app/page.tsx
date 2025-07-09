@@ -6,6 +6,8 @@ const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
+  console.log('🎯 HOME COMPONENT LOADED - Console logging is working!');
+  
   const [messages, setMessages] = useState([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
@@ -78,7 +80,15 @@ export default function Home() {
   };
 
   const sendToBotpress = async (userMessage: string) => {
+    console.log('🔄 SEND TO BOTPRESS - Starting...');
+    console.log('📋 Environment check:');
+    console.log('  - N8N_WEBHOOK_URL:', N8N_WEBHOOK_URL);
+    console.log('  - BACKEND_URL:', BACKEND_URL);
+    console.log('  - conversationId:', conversationId);
+    console.log('  - userKey:', userKey);
+    
     if (!conversationId) {
+      console.error('❌ No conversation ID available');
       throw new Error('Not connected to chat system');
     }
 
@@ -128,6 +138,7 @@ export default function Home() {
       }
 
       const data = await response.json();
+      console.log('✅ N8N request completed successfully, starting polling...');
       pollForBotResponse();
       return data;
       
@@ -279,18 +290,32 @@ export default function Home() {
   };
 
   const handleSendMessage = async () => {
-    if (inputValue.trim() === '' || isLoading || !isConnected) return;
+    console.log('🚀 HANDLE SEND MESSAGE called');
+    console.log('📝 Input value:', inputValue);
+    console.log('🔄 Is loading:', isLoading);
+    console.log('🔗 Is connected:', isConnected);
+    
+    if (inputValue.trim() === '' || isLoading || !isConnected) {
+      console.log('❌ Send message blocked - empty input, loading, or not connected');
+      return;
+    }
     
     const userMessage = inputValue.trim();
     setInputValue('');
     setIsLoading(true);
     
+    console.log('💬 User message:', userMessage);
+    console.log('🔄 Set loading to true, adding user message to chat');
+    
     const userMessageObj = { id: `user-${Date.now()}`, text: userMessage, isBot: false };
     setMessages(prev => [...prev, userMessageObj]);
     
     try {
+      console.log('📡 Calling sendToBotpress...');
       await sendToBotpress(userMessage);
+      console.log('✅ sendToBotpress completed successfully');
     } catch (error) {
+      console.error('❌ Error in sendToBotpress:', error);
       const errorMessage = { 
         id: `error-${Date.now()}`, 
         text: "Sorry, I'm having trouble connecting to the bot right now. Please try again later.", 
