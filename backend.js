@@ -296,6 +296,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
               const multiPartResponse = {
                 isMultiPart: true,
                 responses: responses,
+                text: `Multi-part response with ${responses.length} parts`, // Fallback for compatibility
                 timestamp: Date.now(),
                 id: `bot-multipart-${Date.now()}`,
                 partCount: responses.length

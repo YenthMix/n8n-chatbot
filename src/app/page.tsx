@@ -138,14 +138,21 @@ export default function Home() {
   };
 
   const pollForBotResponse = async () => {
+    console.log('🚀 STARTING POLL FOR BOT RESPONSE');
+    console.log('🔍 Conversation ID:', conversationId);
+    console.log('🔍 Backend URL:', BACKEND_URL);
+    
     if (!conversationId) {
-      console.error('Cannot poll - missing conversationId');
+      console.error('❌ Cannot poll - missing conversationId');
       setIsLoading(false);
       return;
     }
 
     const maxAttempts = 15;
     let attempts = 0;
+    
+    console.log(`📊 Will poll up to ${maxAttempts} times`);
+  
 
     const poll = async () => {
       try {
@@ -168,51 +175,65 @@ export default function Home() {
             console.log('📡 Has text field:', !!botData.response.text);
           }
           
-          if (botData.success && botData.response) {
-            console.log(`✅ GOT BOT RESPONSE`);
+                    if (botData.success && botData.response) {
+            console.log(`✅ GOT BOT RESPONSE - Type: ${botData.response.isMultiPart ? 'MULTI-PART' : 'SINGLE'}`);
             
-            // Check if this is a multi-part response (separate bubbles)
-            if (botData.response.isMultiPart && botData.response.responses) {
-              console.log(`📬 MULTI-PART RESPONSE: ${botData.response.responses.length} separate bubbles`);
+            try {
+              // Check if this is a multi-part response (separate bubbles)
+              if (botData.response.isMultiPart && botData.response.responses && Array.isArray(botData.response.responses)) {
+                console.log(`📬 PROCESSING MULTI-PART: ${botData.response.responses.length} separate bubbles`);
+                
+                // Add each response as a separate bubble with a small delay
+                botData.response.responses.forEach((response: any, index: number) => {
+                  setTimeout(() => {
+                    console.log(`💬 Adding bubble ${index + 1}/${botData.response.responses.length}: "${response.text}"`);
+                    
+                    const botMessage = {
+                      id: response.id || `part-${index}`,
+                      text: response.text || 'No text available',
+                      isBot: true,
+                      partNumber: index + 1,
+                      totalParts: botData.response.responses.length
+                    };
+                    
+                    setMessages(prev => [...prev, botMessage]);
+                    
+                    // Remove loading indicator after the last message
+                    if (index === botData.response.responses.length - 1) {
+                      setIsLoading(false);
+                      console.log(`✅ All ${botData.response.responses.length} bubbles added successfully`);
+                    }
+                  }, index * 800); // 800ms delay between bubbles for natural feel
+                });
+                
+              } else {
+                // Single response
+                console.log(`💬 PROCESSING SINGLE RESPONSE: "${botData.response.text}"`);
+                
+                const botMessage = {
+                  id: botData.response.id || `single-${Date.now()}`,
+                  text: botData.response.text || 'No text available',
+                  isBot: true,
+                  partNumber: 1,
+                  totalParts: 1
+                };
+                
+                setMessages(prev => [...prev, botMessage]);
+                setIsLoading(false);
+                console.log('✅ Single bot message added successfully');
+              }
+            } catch (error) {
+              console.error('❌ ERROR processing bot response:', error);
+              console.error('❌ Response data:', botData.response);
               
-                             // Add each response as a separate bubble with a small delay
-               botData.response.responses.forEach((response: any, index: number) => {
-                setTimeout(() => {
-                  console.log(`💬 Adding bubble ${index + 1}/${botData.response.responses.length}: "${response.text}"`);
-                  
-                  const botMessage = {
-                    id: response.id,
-                    text: response.text,
-                    isBot: true,
-                    partNumber: index + 1,
-                    totalParts: botData.response.responses.length
-                  };
-                  
-                  setMessages(prev => [...prev, botMessage]);
-                  
-                  // Remove loading indicator after the last message
-                  if (index === botData.response.responses.length - 1) {
-                    setIsLoading(false);
-                    console.log(`✅ All ${botData.response.responses.length} bubbles added to chat interface`);
-                  }
-                }, index * 800); // 800ms delay between bubbles for natural feel
-              });
-              
-            } else {
-              // Single response
-              console.log(`💬 SINGLE RESPONSE: "${botData.response.text}"`);
-              
-              const botMessage = {
-                id: botData.response.id,
-                text: botData.response.text,
-                isBot: true,
-                partNumber: 1,
-                totalParts: 1
+              // Fallback: try to display as single message
+              const fallbackMessage = {
+                id: `fallback-${Date.now()}`,
+                text: botData.response.text || 'Error processing response',
+                isBot: true
               };
-              
-              setMessages(prev => [...prev, botMessage]);
+              setMessages(prev => [...prev, fallbackMessage]);
               setIsLoading(false);
-              console.log('💬 Single bot message added to chat interface');
             }
             return;
           } else {
