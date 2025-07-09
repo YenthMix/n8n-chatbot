@@ -6,8 +6,6 @@ const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
-  console.log('🎯 HOME COMPONENT LOADED - Console logging is working!');
-  
   const [messages, setMessages] = useState([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
@@ -80,15 +78,7 @@ export default function Home() {
   };
 
   const sendToBotpress = async (userMessage: string) => {
-    console.log('🔄 SEND TO BOTPRESS - Starting...');
-    console.log('📋 Environment check:');
-    console.log('  - N8N_WEBHOOK_URL:', N8N_WEBHOOK_URL);
-    console.log('  - BACKEND_URL:', BACKEND_URL);
-    console.log('  - conversationId:', conversationId);
-    console.log('  - userKey:', userKey);
-    
     if (!conversationId) {
-      console.error('❌ No conversation ID available');
       throw new Error('Not connected to chat system');
     }
 
@@ -138,7 +128,6 @@ export default function Home() {
       }
 
       const data = await response.json();
-      console.log('✅ N8N request completed successfully, starting polling...');
       pollForBotResponse();
       return data;
       
@@ -149,21 +138,14 @@ export default function Home() {
   };
 
   const pollForBotResponse = async () => {
-    console.log('🚀 STARTING POLL FOR BOT RESPONSE');
-    console.log('🔍 Conversation ID:', conversationId);
-    console.log('🔍 Backend URL:', BACKEND_URL);
-    
     if (!conversationId) {
-      console.error('❌ Cannot poll - missing conversationId');
+      console.error('Cannot poll - missing conversationId');
       setIsLoading(false);
       return;
     }
 
     const maxAttempts = 15;
     let attempts = 0;
-    
-    console.log(`📊 Will poll up to ${maxAttempts} times`);
-  
 
     const poll = async () => {
       try {
@@ -171,82 +153,34 @@ export default function Home() {
         console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} for conversation:`, conversationId);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
-        console.log(`📡 Response status: ${botResponseRes.status}`);
-        
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
           console.log('📡 Backend polling response:', botData);
-          console.log('📡 Response has success:', botData.success);
-          console.log('📡 Response has response:', !!botData.response);
           
-          if (botData.response) {
-            console.log('📡 Response structure:', Object.keys(botData.response));
-            console.log('📡 Is multi-part:', botData.response.isMultiPart);
-            console.log('📡 Has responses array:', !!botData.response.responses);
-            console.log('📡 Has text field:', !!botData.response.text);
-          }
-          
-                    if (botData.success && botData.response) {
-            console.log(`✅ GOT BOT RESPONSE - Type: ${botData.response.isMultiPart ? 'MULTI-PART' : 'SINGLE'}`);
+          if (botData.success && botData.response) {
+            const response = botData.response;
+            console.log(`✅ GOT BOT RESPONSE: "${response.text}"`);
             
-            try {
-              // Check if this is a multi-part response (separate bubbles)
-              if (botData.response.isMultiPart && botData.response.responses && Array.isArray(botData.response.responses)) {
-                console.log(`📬 PROCESSING MULTI-PART: ${botData.response.responses.length} separate bubbles`);
-                
-                // Add each response as a separate bubble with a small delay
-                botData.response.responses.forEach((response: any, index: number) => {
-                  setTimeout(() => {
-                    console.log(`💬 Adding bubble ${index + 1}/${botData.response.responses.length}: "${response.text}"`);
-                    
-                    const botMessage = {
-                      id: response.id || `part-${index}`,
-                      text: response.text || 'No text available',
-                      isBot: true,
-                      partNumber: index + 1,
-                      totalParts: botData.response.responses.length
-                    };
-                    
-                    setMessages(prev => [...prev, botMessage]);
-                    
-                    // Remove loading indicator after the last message
-                    if (index === botData.response.responses.length - 1) {
-                      setIsLoading(false);
-                      console.log(`✅ All ${botData.response.responses.length} bubbles added successfully`);
-                    }
-                  }, index * 800); // 800ms delay between bubbles for natural feel
-                });
-                
-              } else {
-                // Single response
-                console.log(`💬 PROCESSING SINGLE RESPONSE: "${botData.response.text}"`);
-                
-                const botMessage = {
-                  id: botData.response.id || `single-${Date.now()}`,
-                  text: botData.response.text || 'No text available',
-                  isBot: true,
-                  partNumber: 1,
-                  totalParts: 1
-                };
-                
-                setMessages(prev => [...prev, botMessage]);
-                setIsLoading(false);
-                console.log('✅ Single bot message added successfully');
-              }
-            } catch (error) {
-              console.error('❌ ERROR processing bot response:', error);
-              console.error('❌ Response data:', botData.response);
-              
-              // Fallback: try to display as single message
-              const fallbackMessage = {
-                id: `fallback-${Date.now()}`,
-                text: botData.response.text || 'Error processing response',
-                isBot: true
-              };
-              setMessages(prev => [...prev, fallbackMessage]);
-              setIsLoading(false);
+            // Log multi-part info if available
+            if (response.partCount && response.partCount > 1) {
+              console.log(`📝 Multi-part response received: ${response.partCount} parts combined`);
+              console.log(`📏 Total length: ${response.text.length} characters`);
             }
+            
+            const botMessage = {
+              id: response.id,
+              text: response.text,
+              isBot: true,
+              partCount: response.partCount || 1
+            };
+            
+            setMessages(prev => [...prev, botMessage]);
+            setIsLoading(false);
+            console.log(`💬 Bot message added to chat interface (${response.partCount || 1} parts)`);
             return;
+          } else if (botData.message === 'Multi-part response in progress' && botData.partsCollected) {
+            console.log(`📦 Multi-part response in progress: ${botData.partsCollected} parts collected so far...`);
+            // Continue polling but show progress
           } else {
             console.log('⏳ No bot response available yet, continuing to poll...');
           }
@@ -290,32 +224,18 @@ export default function Home() {
   };
 
   const handleSendMessage = async () => {
-    console.log('🚀 HANDLE SEND MESSAGE called');
-    console.log('📝 Input value:', inputValue);
-    console.log('🔄 Is loading:', isLoading);
-    console.log('🔗 Is connected:', isConnected);
-    
-    if (inputValue.trim() === '' || isLoading || !isConnected) {
-      console.log('❌ Send message blocked - empty input, loading, or not connected');
-      return;
-    }
+    if (inputValue.trim() === '' || isLoading || !isConnected) return;
     
     const userMessage = inputValue.trim();
     setInputValue('');
     setIsLoading(true);
     
-    console.log('💬 User message:', userMessage);
-    console.log('🔄 Set loading to true, adding user message to chat');
-    
     const userMessageObj = { id: `user-${Date.now()}`, text: userMessage, isBot: false };
     setMessages(prev => [...prev, userMessageObj]);
     
     try {
-      console.log('📡 Calling sendToBotpress...');
       await sendToBotpress(userMessage);
-      console.log('✅ sendToBotpress completed successfully');
     } catch (error) {
-      console.error('❌ Error in sendToBotpress:', error);
       const errorMessage = { 
         id: `error-${Date.now()}`, 
         text: "Sorry, I'm having trouble connecting to the bot right now. Please try again later.", 
@@ -359,6 +279,9 @@ export default function Home() {
                 <span></span>
                 <span></span>
                 <span></span>
+              </div>
+              <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
+                Bot is responding... (may be multi-part)
               </div>
             </div>
           </div>
