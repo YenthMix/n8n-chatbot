@@ -90,6 +90,7 @@ app.post('/api/track-user-message', async (req, res) => {
   
   console.log(`✅ USER MESSAGE TRACKED SUCCESSFULLY. Total tracked: ${userMessages.size}`);
   console.log(`   Stored: "${text}" for conversation ${conversationId}`);
+  console.log(`   This will help identify if N8N echoes this message back`);
   
   res.json({ success: true });
 });
@@ -206,9 +207,25 @@ app.post('/api/botpress-webhook', async (req, res) => {
     }
     
     console.log(`🔍 Extracted: conversationId="${conversationId}", text="${botText}", isBot="${isBot}"`);
+    console.log(`🔍 Type of isBot: ${typeof isBot}`);
+    console.log(`🔍 Raw isBot value: ${JSON.stringify(isBot)}`);
+    
+    // Check if this matches a tracked user message
+    const trackedUserMessage = userMessages.get(conversationId);
+    if (trackedUserMessage) {
+      console.log(`🔍 Tracked user message: "${trackedUserMessage.text}"`);
+      console.log(`🔍 Incoming message: "${botText}"`);
+      console.log(`🔍 Messages match: ${trackedUserMessage.text === botText}`);
+    } else {
+      console.log(`🔍 No tracked user message found for this conversation`);
+    }
     
     // Use the isBot field from N8N to determine if we should display this message
-    if (isBot === true) {
+    // Handle both boolean and string values for isBot
+    const isBotMessage = isBot === true || isBot === "true";
+    const isUserMessage = isBot === false || isBot === "false";
+    
+    if (isBotMessage) {
       console.log('🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) - will store and display');
       
       if (conversationId && botText && !botText.includes('{{ $json')) {
@@ -226,7 +243,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
         // Clean up the tracked user message since we got a bot response
         userMessages.delete(conversationId);
       }
-    } else if (isBot === false) {
+    } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
       // Don't store user messages, they're already displayed by the frontend
     } else {
