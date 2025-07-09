@@ -205,23 +205,29 @@ app.post('/api/botpress-webhook', async (req, res) => {
     }
     
     if (conversationId && incomingText && !incomingText.includes('{{ $json')) {
-      console.log('COMPARING:', {
-        incoming: incomingText,
-        original: originalUserText,
-        isUserMessage: originalUserText && incomingText.trim() === originalUserText.trim()
-      });
+      // Check if we already have a user message stored for this conversation
+      const storedUserMsg = userMessages.get(conversationId);
       
-      // Only store if it's NOT the user message echo
-      if (!originalUserText || incomingText.trim() !== originalUserText.trim()) {
-        console.log('STORING BOT RESPONSE:', incomingText);
-        botResponses.set(conversationId, {
+      if (!storedUserMsg) {
+        // First message = store as user message
+        console.log('STORING USER MESSAGE:', incomingText);
+        userMessages.set(conversationId, {
           text: incomingText,
-          timestamp: Date.now(),
-          id: `msg-${Date.now()}`,
-          isBot: true
+          timestamp: Date.now()
         });
       } else {
-        console.log('IGNORING USER ECHO:', incomingText);
+        // Compare with stored user message
+        if (incomingText.trim() !== storedUserMsg.text.trim()) {
+          console.log('STORING BOT RESPONSE:', incomingText);
+          botResponses.set(conversationId, {
+            text: incomingText,
+            timestamp: Date.now(),
+            id: `msg-${Date.now()}`,
+            isBot: true
+          });
+        } else {
+          console.log('IGNORING USER ECHO:', incomingText);
+        }
       }
     }
     
