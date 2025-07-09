@@ -77,11 +77,19 @@ app.post('/api/track-user-message', async (req, res) => {
   const { conversationId, text } = req.body;
   console.log(`🔵 TRACKING USER MESSAGE: "${text}" for conversation ${conversationId}`);
   
+  if (!conversationId || !text) {
+    console.log('❌ TRACKING FAILED: Missing conversationId or text');
+    return res.status(400).json({ error: 'Missing conversationId or text' });
+  }
+  
   // Store user message with timestamp to track what the user actually sent
   userMessages.set(conversationId, {
     text: text,
     timestamp: Date.now()
   });
+  
+  console.log(`✅ USER MESSAGE TRACKED SUCCESSFULLY. Total tracked: ${userMessages.size}`);
+  console.log(`   Stored: "${text}" for conversation ${conversationId}`);
   
   res.json({ success: true });
 });
@@ -199,6 +207,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
     // Check if this matches a user message we tracked
     const trackedUserMessage = userMessages.get(conversationId);
     console.log(`👤 Tracked user message:`, trackedUserMessage ? `"${trackedUserMessage.text}"` : 'NONE');
+    console.log(`👥 All tracked messages:`, Array.from(userMessages.keys()));
     
     let isUserMessage = false;
     let isBotResponse = false;
@@ -207,10 +216,31 @@ app.post('/api/botpress-webhook', async (req, res) => {
       // This exactly matches what the user sent - it's a user message
       isUserMessage = true;
       console.log('✅ IDENTIFIED AS USER MESSAGE (exact match with tracked message)');
-    } else {
-      // This doesn't match the user message - it's a bot response
+    } else if (trackedUserMessage) {
+      // We have a tracked message but text doesn't match - this is a bot response
       isBotResponse = true;
-      console.log('✅ IDENTIFIED AS BOT RESPONSE (different from tracked user message)');
+      console.log('✅ IDENTIFIED AS BOT RESPONSE (different text from tracked user message)');
+      console.log(`   User sent: "${trackedUserMessage.text}"`);
+      console.log(`   This message: "${botText}"`);
+    } else {
+      // No tracked message found - this could be a bot response or tracking failed
+      // Check some heuristics to determine if this looks like a bot response
+      const looksLikeBotResponse = 
+        botText.length > 20 ||                                    // Longer responses usually from bot
+        botText.includes('!') ||                                  // Exclamation marks common in bot responses
+        botText.includes('?') ||                                  // Questions from bot
+        botText.includes('helpen') || botText.includes('kan ik') || // Dutch bot phrases
+        /[A-Z].*[a-z].*[.!?]/.test(botText);                     // Proper sentence structure
+        
+      if (looksLikeBotResponse) {
+        isBotResponse = true;
+        console.log('✅ IDENTIFIED AS BOT RESPONSE (no tracking found but looks like bot response)');
+        console.log(`   Heuristics: length=${botText.length}, proper structure, contains bot phrases`);
+      } else {
+        isUserMessage = true;
+        console.log('⚠️ IDENTIFIED AS USER MESSAGE (no tracking found and looks like user message)');
+        console.log('   This suggests tracking failed - the user message was not properly tracked');
+      }
     }
     
     if (conversationId && botText && !botText.includes('{{ $json')) {

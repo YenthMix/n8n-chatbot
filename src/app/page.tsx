@@ -83,10 +83,10 @@ export default function Home() {
     }
 
     try {
-      console.log(`🔵 Tracking user message: "${userMessage}"`);
+      console.log(`🔵 Tracking user message: "${userMessage}" for conversation: ${conversationId}`);
       
       // First, track the user message so backend can distinguish it from bot response
-      await fetch(`${BACKEND_URL}/api/track-user-message`, {
+      const trackingResponse = await fetch(`${BACKEND_URL}/api/track-user-message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,6 +96,17 @@ export default function Home() {
           text: userMessage
         })
       });
+
+      if (!trackingResponse.ok) {
+        console.error('❌ Failed to track user message:', trackingResponse.status);
+        throw new Error('Failed to track user message');
+      }
+
+      const trackingResult = await trackingResponse.json();
+      console.log('✅ User message tracking response:', trackingResult);
+
+      // Small delay to ensure tracking is processed
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       console.log(`🚀 Sending to N8N: "${userMessage}"`);
       
