@@ -44,7 +44,9 @@ const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 
 // Store bot responses temporarily (in production, use Redis or database)
-const botResponses = new Map();// Track user messages to ignore them when they come back from N8N
+const botResponses = new Map();
+
+// Track user messages to distinguish them from bot responses
 const userMessages = new Map();
 
 app.post('/api/user', async (req, res) => {
@@ -70,6 +72,20 @@ app.post('/api/user', async (req, res) => {
   }
 });
 
+// Track user messages before sending to N8N
+app.post('/api/track-user-message', async (req, res) => {
+  const { conversationId, text } = req.body;
+  console.log(`🔵 TRACKING USER MESSAGE: "${text}" for conversation ${conversationId}`);
+  
+  // Store user message with timestamp to track what the user actually sent
+  userMessages.set(conversationId, {
+    text: text,
+    timestamp: Date.now()
+  });
+  
+  res.json({ success: true });
+});
+
 app.post('/api/conversation', async (req, res) => {
   const { userKey } = req.body;
   try {
@@ -91,27 +107,6 @@ app.post('/api/conversation', async (req, res) => {
     
     res.json({ conversation: data.conversation });
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Track user messages so we can ignore them when they come back from N8N
-app.post('/api/track-user-message', async (req, res) => {
-  const { conversationId, text } = req.body;
-  try {
-    console.log('TRACKING USER MESSAGE:', { conversationId, text });
-    
-    // Store user message temporarily (5 minutes)
-    userMessages.set(conversationId, {
-      text: text,
-      timestamp: Date.now()
-    });
-    
-    console.log('USER MESSAGE STORED. Total stored:', userMessages.size);
-    
-    res.json({ success: true });
-  } catch (err) {
-    console.log('ERROR tracking user message:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -146,33 +141,25 @@ app.get('/api/messages', async (req, res) => {
     const storedResponse = botResponses.get(conversationId);
     
     if (storedResponse) {
-      // Only return if message is at least 2 seconds old (ensuring both webhook calls completed)
-      const messageAge = Date.now() - storedResponse.timestamp;
+      // Format it like the old Botpress API response
+      const formattedResponse = {
+        messages: [
+          {
+            id: storedResponse.id,
+            type: 'text',
+            payload: {
+              text: storedResponse.text
+            },
+            userId: 'bot',
+            createdAt: new Date(storedResponse.timestamp).toISOString()
+          }
+        ]
+      };
       
-      if (messageAge >= 2000) {
-        // Format it like the old Botpress API response
-        const formattedResponse = {
-          messages: [
-            {
-              id: storedResponse.id,
-              type: 'text',
-              payload: {
-                text: storedResponse.text
-              },
-              userId: 'bot',
-              createdAt: new Date(storedResponse.timestamp).toISOString()
-            }
-          ]
-        };
-        
-        // Remove the response after sending it
-        botResponses.delete(conversationId);
-        
-        res.json(formattedResponse);
-      } else {
-        // Return empty messages array like old API
-        res.json({ messages: [] });
-      }
+      // Remove the response after sending it
+      botResponses.delete(conversationId);
+      
+      res.json(formattedResponse);
     } else {
       // Return empty messages array like old API
       res.json({ messages: [] });
@@ -184,40 +171,93 @@ app.get('/api/messages', async (req, res) => {
 
 app.post('/api/botpress-webhook', async (req, res) => {
   try {
+    console.log('🔄 WEBHOOK RECEIVED FROM N8N:');
+    console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
+    
     const body = req.body;
-    console.log('FULL WEBHOOK DATA:', JSON.stringify(body, null, 2));
+    let conversationId, botText;
     
-    let conversationId, incomingText, originalUserText;
-    
-    // Extract the incoming message and original user message from N8N
+    // Try multiple extraction patterns
     if (body.body && body.body.data) {
+      // N8N sends: { body: { data: { conversationId, payload: { text } } } }
       conversationId = body.body.data.conversationId;
-      incomingText = body.body.data.payload?.text || body.body.data.text;
-      // Look for the original user message in the webhook data
-      originalUserText = body.body.originalText || body.originalText || body.userText;
+      botText = body.body.data.payload?.text || body.body.data.text;
+      console.log('📍 Using body.body.data pattern');
     } else if (body.conversationId) {
+      // Direct structure: { conversationId, payload: { text } }
       conversationId = body.conversationId;
-      incomingText = body.payload?.text || body.text;
-      originalUserText = body.originalText || body.userText;
+      botText = body.payload?.text || body.text;
+      console.log('📍 Using body.conversationId pattern');
     } else if (body.text) {
-      incomingText = body.text;
-      originalUserText = body.originalText || body.userText;
+      // Simple text structure
+      botText = body.text;
+      console.log('📍 Using body.text pattern');
     }
     
-    if (conversationId && incomingText && !incomingText.includes('{{ $json')) {
-      // STORE ALL MESSAGES - let's see everything in the webchat
-      console.log('STORING ALL MESSAGES:', incomingText);
-      botResponses.set(conversationId, {
-        text: incomingText,
-        timestamp: Date.now(),
-        id: `msg-${Date.now()}`,
-        isBot: true
-      });
+    console.log(`🔍 Extracted: conversationId="${conversationId}", text="${botText}"`);
+    
+    // Check if this matches a user message we tracked
+    const trackedUserMessage = userMessages.get(conversationId);
+    console.log(`👤 Tracked user message:`, trackedUserMessage ? `"${trackedUserMessage.text}"` : 'NONE');
+    
+    let isUserMessage = false;
+    let isBotResponse = false;
+    
+    if (trackedUserMessage && botText === trackedUserMessage.text) {
+      // This exactly matches what the user sent - it's a user message
+      isUserMessage = true;
+      console.log('✅ IDENTIFIED AS USER MESSAGE (exact match with tracked message)');
+    } else {
+      // This doesn't match the user message - it's a bot response
+      isBotResponse = true;
+      console.log('✅ IDENTIFIED AS BOT RESPONSE (different from tracked user message)');
     }
     
-    res.json({ success: true });
+    if (conversationId && botText && !botText.includes('{{ $json')) {
+      
+      if (isUserMessage) {
+        console.log('❌ SKIPPING STORAGE - This is a user message, not storing');
+        // Clean up the tracked user message since we've processed it
+        userMessages.delete(conversationId);
+      } else if (isBotResponse) {
+        console.log(`💾 STORING BOT RESPONSE: "${botText}"`);
+        
+        // Store the bot response so the frontend can retrieve it
+        botResponses.set(conversationId, {
+          text: botText,
+          timestamp: Date.now(),
+          id: `bot-${Date.now()}`
+        });
+        
+        console.log('✅ Bot response stored successfully for frontend polling');
+      }
+      
+      // Clean up old responses and user messages (older than 5 minutes)
+      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      for (const [key, value] of botResponses.entries()) {
+        if (value.timestamp < fiveMinutesAgo) {
+          botResponses.delete(key);
+        }
+      }
+      for (const [key, value] of userMessages.entries()) {
+        if (value.timestamp < fiveMinutesAgo) {
+          userMessages.delete(key);
+        }
+      }
+    }
+    
+    res.json({ 
+      success: true,
+      conversationId: conversationId,
+      message: botText,
+      received: true
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Webhook processing failed' });
+    console.error('❌ WEBHOOK ERROR:', error);
+    res.status(500).json({ 
+      error: 'Webhook processing failed',
+      success: false 
+    });
   }
 });
 
@@ -225,37 +265,19 @@ app.post('/api/botpress-webhook', async (req, res) => {
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const response = botResponses.get(conversationId);
+    const botResponse = botResponses.get(conversationId);
     
-    if (response) {
-      // ONLY return if it's a bot message AND old enough (2 seconds)
-      const messageAge = Date.now() - response.timestamp;
-      const isActuallyBot = response.isBot === true;
-      
-      console.log('DEBUG: Checking response:', {
-        text: response.text,
-        isBot: response.isBot,
-        isActuallyBot,
-        age: messageAge
+    if (botResponse) {
+      // Remove the response after sending it to prevent duplicates
+      botResponses.delete(conversationId);
+      res.json({ 
+        success: true, 
+        response: botResponse 
       });
-      
-      if (isActuallyBot && messageAge >= 2000) {
-        // Remove the response after sending it to prevent duplicates
-        botResponses.delete(conversationId);
-        res.json({ 
-          success: true, 
-          response: response 
-        });
-      } else {
-        res.json({ 
-          success: false, 
-          message: isActuallyBot ? 'Response too recent' : 'Not a bot message'
-        });
-      }
     } else {
       res.json({ 
         success: false, 
-        message: 'No response available' 
+        message: 'No bot response available' 
       });
     }
   } catch (error) {
@@ -270,12 +292,25 @@ app.get('/api/botpress-webhook', async (req, res) => {
 // Debug endpoint to see what's stored
 app.get('/api/debug/stored-responses', async (req, res) => {
   const allResponses = {};
+  const allUserMessages = {};
+  
   for (const [key, value] of botResponses.entries()) {
     allResponses[key] = value;
   }
+  
+  for (const [key, value] of userMessages.entries()) {
+    allUserMessages[key] = value;
+  }
+  
+  console.log('🔍 DEBUG ENDPOINT CALLED - Current storage state:');
+  console.log(`   Bot responses: ${botResponses.size} stored`);
+  console.log(`   User messages: ${userMessages.size} tracked`);
+  
   res.json({ 
-    totalStored: botResponses.size,
-    responses: allResponses,
+    totalBotResponses: botResponses.size,
+    totalUserMessages: userMessages.size,
+    botResponses: allResponses,
+    userMessages: allUserMessages,
     timestamp: Date.now()
   });
 });

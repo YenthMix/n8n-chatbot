@@ -67,6 +67,7 @@ export default function Home() {
       setIsConnected(true);
       
     } catch (error) {
+      console.error('Failed to initialize chat API:', error);
       const errorMessage = {
         id: `error-${Date.now()}`,
         text: "Failed to connect to Botpress. Please make sure the backend server is running with 'npm run backend'.",
@@ -82,6 +83,23 @@ export default function Home() {
     }
 
     try {
+      console.log(`🔵 Tracking user message: "${userMessage}"`);
+      
+      // First, track the user message so backend can distinguish it from bot response
+      await fetch(`${BACKEND_URL}/api/track-user-message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId,
+          text: userMessage
+        })
+      });
+
+      console.log(`🚀 Sending to N8N: "${userMessage}"`);
+      
+      // Then send to N8N
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
         headers: {
@@ -103,12 +121,14 @@ export default function Home() {
       return data;
       
     } catch (error) {
+      console.error('Error sending message:', error);
       throw error;
     }
   };
 
   const pollForBotResponse = async () => {
     if (!conversationId) {
+      console.error('Cannot poll - missing conversationId');
       setIsLoading(false);
       return;
     }
@@ -119,12 +139,15 @@ export default function Home() {
     const poll = async () => {
       try {
         // Check for bot responses from N8N backend only
+        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} for conversation:`, conversationId);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
+          console.log('📡 Backend polling response:', botData);
           
           if (botData.success && botData.response) {
+            console.log(`✅ GOT BOT RESPONSE: "${botData.response.text}"`);
             
             const botMessage = {
               id: botData.response.id,
@@ -134,8 +157,13 @@ export default function Home() {
             
             setMessages(prev => [...prev, botMessage]);
             setIsLoading(false);
+            console.log('💬 Bot message added to chat interface');
             return;
+          } else {
+            console.log('⏳ No bot response available yet, continuing to poll...');
           }
+        } else {
+          console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
         }
         
         // No bot response available yet, try again
@@ -169,7 +197,8 @@ export default function Home() {
       }
     };
 
-    setTimeout(poll, 5000);
+    console.log('🚀 Starting to poll for bot response in 2 seconds...');
+    setTimeout(poll, 2000);
   };
 
   const handleSendMessage = async () => {
