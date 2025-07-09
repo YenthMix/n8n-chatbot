@@ -83,9 +83,34 @@ export default function Home() {
     }
 
     try {
+      console.log(`🔵 Tracking user message: "${userMessage}" for conversation: ${conversationId}`);
+      
+      // First, track the user message so backend can distinguish it from bot response
+      const trackingResponse = await fetch(`${BACKEND_URL}/api/track-user-message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId,
+          text: userMessage
+        })
+      });
+
+      if (!trackingResponse.ok) {
+        console.error('❌ Failed to track user message:', trackingResponse.status);
+        throw new Error('Failed to track user message');
+      }
+
+      const trackingResult = await trackingResponse.json();
+      console.log('✅ User message tracking response:', trackingResult);
+
+      // Small delay to ensure tracking is processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       console.log(`🚀 Sending to N8N: "${userMessage}"`);
       
-      // Send to N8N - backend will now use length comparison to identify bot response
+      // Then send to N8N
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
         headers: {
@@ -183,8 +208,8 @@ export default function Home() {
       }
     };
 
-    console.log('🚀 Starting to poll for bot response in 3 seconds (waiting for 2 messages to be compared)...');
-    setTimeout(poll, 3000);
+    console.log('🚀 Starting to poll for bot response in 2 seconds...');
+    setTimeout(poll, 2000);
   };
 
   const handleSendMessage = async () => {
