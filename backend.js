@@ -43,14 +43,11 @@ const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 
 
-// Store bot responses temporarily (in production, use Redis or database)
-const botResponses = new Map();
-
-// Store multiple bot responses per conversation
-const botResponseQueues = new Map();
-
 // Track user messages to distinguish them from bot responses
 const userMessages = new Map();
+
+// Track multiple bot responses for the same conversation (each conversation can have multiple queued responses)
+const conversationResponseQueues = new Map();
 
 app.post('/api/user', async (req, res) => {
   try {
@@ -149,10 +146,13 @@ app.post('/api/message-DISABLED', async (req, res) => {
 app.get('/api/messages', async (req, res) => {
   const { conversationId, userKey } = req.query;
   try {
-    // Check if we have a stored N8N response for this conversation
-    const storedResponse = botResponses.get(conversationId);
+    // Check if we have queued responses for this conversation
+    const responseQueue = conversationResponseQueues.get(conversationId);
     
-    if (storedResponse) {
+    if (responseQueue && responseQueue.length > 0) {
+      // Get the first response from the queue
+      const storedResponse = responseQueue.shift();
+      
       // Format it like the old Botpress API response
       const formattedResponse = {
         messages: [
@@ -168,8 +168,10 @@ app.get('/api/messages', async (req, res) => {
         ]
       };
       
-      // Remove the response after sending it
-      botResponses.delete(conversationId);
+      // If queue is empty, remove it
+      if (responseQueue.length === 0) {
+        conversationResponseQueues.delete(conversationId);
+      }
       
       res.json(formattedResponse);
     } else {
@@ -229,50 +231,30 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const isUserMessage = isBot === false || isBot === "false";
     
     if (isBotMessage) {
-      console.log('🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) - will queue for potential multi-part response');
+      console.log('🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) - will store and display');
       
       if (conversationId && botText && !botText.includes('{{ $json')) {
-        console.log(`💾 QUEUEING BOT RESPONSE: "${botText}"`);
+        console.log(`💾 STORING BOT RESPONSE: "${botText}"`);
         
-        // Add to response queue for this conversation
-        if (!botResponseQueues.has(conversationId)) {
-          botResponseQueues.set(conversationId, {
-            responses: [],
-            timer: null,
-            timestamp: Date.now()
-          });
+        // Create or get the response queue for this conversation
+        if (!conversationResponseQueues.has(conversationId)) {
+          conversationResponseQueues.set(conversationId, []);
         }
         
-        const queue = botResponseQueues.get(conversationId);
-        queue.responses.push({
+        const responseQueue = conversationResponseQueues.get(conversationId);
+        
+        // Add the new response to the queue with timestamp
+        const botResponse = {
           text: botText,
           timestamp: Date.now(),
-          id: `bot-${Date.now()}-${queue.responses.length}`
-        });
+          id: `bot-${Date.now()}-${responseQueue.length}`,
+          sequenceNumber: responseQueue.length + 1
+        };
         
-        console.log(`✅ Bot response queued. Total responses in queue: ${queue.responses.length}`);
+        responseQueue.push(botResponse);
         
-        // Clear existing timer if any
-        if (queue.timer) {
-          clearTimeout(queue.timer);
-        }
-        
-        // Set timer to wait for more responses (2.5 seconds)
-        queue.timer = setTimeout(() => {
-          console.log(`⏰ Timer expired for conversation ${conversationId}. Processing ${queue.responses.length} bot responses.`);
-          
-          // Move all queued responses to the main storage
-          botResponses.set(conversationId, {
-            responses: [...queue.responses],
-            timestamp: Date.now(),
-            id: `multi-bot-${Date.now()}`
-          });
-          
-          // Clean up the queue
-          botResponseQueues.delete(conversationId);
-          
-          console.log(`✅ ${queue.responses.length} bot responses moved to main storage for frontend polling`);
-        }, 2500); // Wait 2.5 seconds for additional responses
+        console.log(`✅ Bot response #${botResponse.sequenceNumber} queued for conversation ${conversationId}`);
+        console.log(`📊 Total responses in queue: ${responseQueue.length}`);
         
         // Clean up the tracked user message since we got a bot response
         userMessages.delete(conversationId);
@@ -308,23 +290,23 @@ app.post('/api/botpress-webhook', async (req, res) => {
     
     // Clean up old responses and user messages (older than 5 minutes)
     const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    for (const [key, value] of botResponses.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        botResponses.delete(key);
+    
+    // Clean up old response queues
+    for (const [conversationId, queue] of conversationResponseQueues.entries()) {
+      const filteredQueue = queue.filter(response => response.timestamp >= fiveMinutesAgo);
+      if (filteredQueue.length === 0) {
+        conversationResponseQueues.delete(conversationId);
+        console.log(`🧹 Cleaned up old queue for conversation ${conversationId}`);
+      } else if (filteredQueue.length !== queue.length) {
+        conversationResponseQueues.set(conversationId, filteredQueue);
+        console.log(`🧹 Cleaned up ${queue.length - filteredQueue.length} old responses from conversation ${conversationId}`);
       }
     }
+    
+    // Clean up old user messages
     for (const [key, value] of userMessages.entries()) {
       if (value.timestamp < fiveMinutesAgo) {
         userMessages.delete(key);
-      }
-    }
-    // Clean up old response queues
-    for (const [key, value] of botResponseQueues.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        if (value.timer) {
-          clearTimeout(value.timer);
-        }
-        botResponseQueues.delete(key);
       }
     }
     
@@ -344,38 +326,37 @@ app.post('/api/botpress-webhook', async (req, res) => {
   }
 });
 
-// New endpoint for frontend to get bot responses (supports multiple responses)
+// New endpoint for frontend to get bot responses
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const botResponse = botResponses.get(conversationId);
+    const responseQueue = conversationResponseQueues.get(conversationId);
     
-    if (botResponse) {
-      console.log(`📤 Sending ${botResponse.responses ? botResponse.responses.length : 1} bot response(s) to frontend`);
+    if (responseQueue && responseQueue.length > 0) {
+      // Get the first response from the queue (FIFO - First In, First Out)
+      const nextResponse = responseQueue.shift();
       
-      // Remove the response after sending it to prevent duplicates
-      botResponses.delete(conversationId);
+      console.log(`📤 SENDING bot response #${nextResponse.sequenceNumber}: "${nextResponse.text}"`);
+      console.log(`📊 Remaining responses in queue: ${responseQueue.length}`);
       
-      // Check if it's multiple responses or single response (backward compatibility)
-      if (botResponse.responses && Array.isArray(botResponse.responses)) {
-        // Multiple responses
-        res.json({ 
-          success: true, 
-          responses: botResponse.responses,
-          count: botResponse.responses.length
-        });
-      } else {
-        // Single response (backward compatibility)
-        res.json({ 
-          success: true, 
-          responses: [botResponse],
-          count: 1
-        });
+      // If queue is empty, remove it from the map
+      if (responseQueue.length === 0) {
+        conversationResponseQueues.delete(conversationId);
+        console.log(`🧹 Queue empty - removed queue for conversation ${conversationId}`);
       }
+      
+      res.json({ 
+        success: true, 
+        response: nextResponse,
+        hasMore: responseQueue.length > 0,
+        queueLength: responseQueue.length
+      });
     } else {
       res.json({ 
         success: false, 
-        message: 'No bot response available' 
+        message: 'No bot response available',
+        hasMore: false,
+        queueLength: 0
       });
     }
   } catch (error) {
@@ -390,43 +371,66 @@ app.get('/api/botpress-webhook', async (req, res) => {
 
 // Debug endpoint to see what's stored
 app.get('/api/debug/stored-responses', async (req, res) => {
-  const allResponses = {};
-  const allUserMessages = {};
   const allQueues = {};
+  const allUserMessages = {};
+  let totalQueuedResponses = 0;
   
-  for (const [key, value] of botResponses.entries()) {
-    allResponses[key] = value;
+  for (const [key, queue] of conversationResponseQueues.entries()) {
+    allQueues[key] = queue;
+    totalQueuedResponses += queue.length;
   }
   
   for (const [key, value] of userMessages.entries()) {
     allUserMessages[key] = value;
   }
   
-  for (const [key, value] of botResponseQueues.entries()) {
-    allQueues[key] = {
-      responsesCount: value.responses.length,
-      responses: value.responses,
-      hasTimer: value.timer !== null,
-      timestamp: value.timestamp
-    };
-  }
-  
   console.log('🔍 DEBUG ENDPOINT CALLED - Current storage state:');
-  console.log(`   Bot responses: ${botResponses.size} stored`);
+  console.log(`   Response queues: ${conversationResponseQueues.size} conversations`);
+  console.log(`   Total queued responses: ${totalQueuedResponses}`);
   console.log(`   User messages: ${userMessages.size} tracked`);
-  console.log(`   Response queues: ${botResponseQueues.size} active`);
   
   res.json({ 
-    totalBotResponses: botResponses.size,
+    totalConversations: conversationResponseQueues.size,
+    totalQueuedResponses: totalQueuedResponses,
     totalUserMessages: userMessages.size,
-    totalResponseQueues: botResponseQueues.size,
-    botResponses: allResponses,
-    userMessages: allUserMessages,
     responseQueues: allQueues,
+    userMessages: allUserMessages,
     timestamp: Date.now()
   });
 });
 
-const PORT = process.env.PORT;
+// Add endpoint to check queue status for a specific conversation
+app.get('/api/queue-status/:conversationId', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const responseQueue = conversationResponseQueues.get(conversationId);
+    
+    if (responseQueue) {
+      res.json({
+        conversationId,
+        queueLength: responseQueue.length,
+        responses: responseQueue.map(r => ({
+          id: r.id,
+          text: r.text.substring(0, 50) + (r.text.length > 50 ? '...' : ''),
+          timestamp: r.timestamp,
+          sequenceNumber: r.sequenceNumber
+        }))
+      });
+    } else {
+      res.json({
+        conversationId,
+        queueLength: 0,
+        responses: []
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get queue status' });
+  }
+});
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
+  console.log(`🚀 Backend server running on port ${PORT}`);
+  console.log(`📡 Webhook endpoint: http://localhost:${PORT}/api/botpress-webhook`);
+  console.log(`🔍 Debug endpoint: http://localhost:${PORT}/api/debug/stored-responses`);
 }); 

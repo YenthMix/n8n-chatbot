@@ -146,6 +146,7 @@ export default function Home() {
 
     const maxAttempts = 15;
     let attempts = 0;
+    let responseCount = 0;
 
     const poll = async () => {
       try {
@@ -157,25 +158,33 @@ export default function Home() {
           const botData = await botResponseRes.json();
           console.log('📡 Backend polling response:', botData);
           
-          if (botData.success && (botData.responses || botData.response)) {
-            // Handle multiple responses (new format) or single response (backward compatibility)
-            const responses = botData.responses || [botData.response];
-            console.log(`✅ GOT ${responses.length} BOT RESPONSE(S):`);
+          if (botData.success && botData.response) {
+            responseCount++;
+            console.log(`✅ GOT BOT RESPONSE #${responseCount}: "${botData.response.text}"`);
+            console.log(`📊 Has more responses: ${botData.hasMore}, Queue length: ${botData.queueLength}`);
             
-            const botMessages = responses.map((response: any, index: number) => {
-              console.log(`   Response ${index + 1}: "${response.text}"`);
-              return {
-                id: response.id,
-                text: response.text,
-                isBot: true
-              };
-            });
+            const botMessage = {
+              id: botData.response.id,
+              text: botData.response.text,
+              isBot: true
+            };
             
-            // Add all bot messages as separate bubbles
-            setMessages(prev => [...prev, ...botMessages]);
-            setIsLoading(false);
-            console.log(`💬 ${botMessages.length} bot message(s) added to chat interface as separate bubbles`);
-            return;
+            setMessages(prev => [...prev, botMessage]);
+            console.log(`💬 Bot message #${responseCount} added to chat interface`);
+            
+            // Check if there are more responses coming
+            if (botData.hasMore) {
+              console.log('🔄 More responses available, polling immediately...');
+              // Reset attempts for the next response
+              attempts = 0;
+              // Poll immediately for the next response (no delay)
+              setTimeout(poll, 100);
+              return;
+            } else {
+              console.log(`✅ All responses received (total: ${responseCount}), stopping poll`);
+              setIsLoading(false);
+              return;
+            }
           } else {
             console.log('⏳ No bot response available yet, continuing to poll...');
           }
@@ -188,6 +197,7 @@ export default function Home() {
         if (attempts < maxAttempts) {
           setTimeout(poll, 1000);
         } else {
+          console.log(`❌ Max attempts reached, stopping poll (received ${responseCount} responses)`);
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
             text: "I'm taking longer than usual to respond. Please try sending your message again.",
@@ -198,9 +208,11 @@ export default function Home() {
         }
         
       } catch (error) {
+        console.error('❌ Polling error:', error);
         attempts++;
         
         if (attempts >= maxAttempts) {
+          console.log(`❌ Max attempts reached due to errors, stopping poll (received ${responseCount} responses)`);
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
             text: "I'm having trouble connecting right now. Please try again.",
