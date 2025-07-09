@@ -11,6 +11,16 @@ interface Message {
   text: string;
   isBot: boolean;
   parts?: number;
+  partNumber?: number;
+  totalParts?: number;
+  batchId?: string;
+}
+
+// Bot response from backend
+interface BotMessagePart {
+  id: string;
+  text: string;
+  timestamp: number;
 }
 
 export default function Home() {
@@ -167,25 +177,47 @@ export default function Home() {
           
           if (botData.success && botData.response) {
             const response = botData.response;
-            const messageText = response.text;
-            const partCount = response.parts || 1;
             
-            console.log(`✅ GOT BOT RESPONSE: "${messageText}"`);
-            if (partCount > 1) {
-              console.log(`📊 COMBINED FROM ${partCount} PARTS`);
+            // Handle new format with multiple messages
+            if (response.messages && Array.isArray(response.messages)) {
+              const messages = response.messages as BotMessagePart[];
+              const totalParts = response.totalParts || messages.length;
+              
+              console.log(`✅ GOT ${messages.length} BOT MESSAGE(S):`);
+              messages.forEach((msg: BotMessagePart, index: number) => {
+                console.log(`   Part ${index + 1}: "${msg.text}"`);
+              });
+              
+              // Add each message as a separate bubble
+              const botMessages = messages.map((msg: BotMessagePart, index: number) => ({
+                id: msg.id,
+                text: msg.text,
+                isBot: true,
+                partNumber: index + 1,
+                totalParts: totalParts,
+                batchId: response.batchId
+              }));
+              
+              setMessages(prev => [...prev, ...botMessages]);
+              setIsLoading(false);
+              console.log(`💬 ${messages.length} separate bot bubbles added to chat interface`);
+              return;
+            } else {
+              // Fallback for old single message format
+              const messageText = response.text;
+              console.log(`✅ GOT SINGLE BOT RESPONSE: "${messageText}"`);
+              
+              const botMessage = {
+                id: response.id,
+                text: messageText,
+                isBot: true
+              };
+              
+              setMessages(prev => [...prev, botMessage]);
+              setIsLoading(false);
+              console.log(`💬 Single bot message added to chat interface`);
+              return;
             }
-            
-            const botMessage = {
-              id: response.id,
-              text: messageText,
-              isBot: true,
-              parts: partCount
-            };
-            
-            setMessages(prev => [...prev, botMessage]);
-            setIsLoading(false);
-            console.log(`💬 Bot message added to chat interface${partCount > 1 ? ` (combined from ${partCount} parts)` : ''}`);
-            return;
           } else {
             console.log('⏳ No bot response available yet, continuing to poll...');
           }
@@ -274,9 +306,9 @@ export default function Home() {
           >
             <div className="message-content">
               {message.text}
-              {message.isBot && message.parts && message.parts > 1 && (
+              {message.isBot && message.totalParts && message.totalParts > 1 && (
                 <div className="message-parts-indicator">
-                  📝 Combined from {message.parts} parts
+                  Part {message.partNumber} of {message.totalParts}
                 </div>
               )}
             </div>

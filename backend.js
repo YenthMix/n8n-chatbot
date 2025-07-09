@@ -98,23 +98,23 @@ function processBotMessageBatch(conversationId, messages) {
     // Single message - store as is
     const message = messages[0];
     console.log(`📝 STORING SINGLE MESSAGE: "${message.text}"`);
-    botResponses.set(conversationId, message);
+    botResponses.set(conversationId, { messages: [message], totalParts: 1 });
   } else {
-    // Multiple messages - combine them
-    const combinedText = messages.map(msg => msg.text).join('\n\n');
-    const combinedMessage = {
-      text: combinedText,
-      timestamp: messages[0].timestamp,
-      id: `bot-combined-${Date.now()}`,
-      parts: messages.length
-    };
+    // Multiple messages - store them separately but as a batch
+    console.log(`📝 STORING ${messages.length} SEPARATE MESSAGES:`);
+    messages.forEach((msg, index) => {
+      console.log(`   Part ${index + 1}: "${msg.text}"`);
+    });
     
-    console.log(`🔗 COMBINING ${messages.length} MESSAGES INTO ONE:`);
-    console.log(`   Combined text: "${combinedText}"`);
-    botResponses.set(conversationId, combinedMessage);
+    // Store all messages with batch info
+    botResponses.set(conversationId, { 
+      messages: messages, 
+      totalParts: messages.length,
+      batchId: `batch-${Date.now()}`
+    });
   }
   
-  console.log(`✅ BATCH PROCESSED AND STORED - Frontend can now retrieve it`);
+  console.log(`✅ BATCH PROCESSED AND STORED - Frontend can now retrieve ${messages.length} separate bubble(s)`);
 }
 
 app.post('/api/user', async (req, res) => {
