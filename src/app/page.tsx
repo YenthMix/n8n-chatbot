@@ -146,7 +146,6 @@ export default function Home() {
 
     const maxAttempts = 15;
     let attempts = 0;
-    let responseCount = 0;
 
     const poll = async () => {
       try {
@@ -159,32 +158,30 @@ export default function Home() {
           console.log('📡 Backend polling response:', botData);
           
           if (botData.success && botData.response) {
-            responseCount++;
-            console.log(`✅ GOT BOT RESPONSE #${responseCount}: "${botData.response.text}"`);
-            console.log(`📊 Has more responses: ${botData.hasMore}, Queue length: ${botData.queueLength}`);
+            console.log(`✅ GOT BOT RESPONSE: "${botData.response.text}"`);
+            
+            // Check if this is a combined response from multiple parts
+            const isMultiPart = botData.response.partCount && botData.response.partCount > 1;
+            const displayText = isMultiPart 
+              ? `${botData.response.text}\n\n📊 (Combined from ${botData.response.partCount} response parts)`
+              : botData.response.text;
             
             const botMessage = {
               id: botData.response.id,
-              text: botData.response.text,
-              isBot: true
+              text: displayText,
+              isBot: true,
+              partCount: botData.response.partCount || 1
             };
             
             setMessages(prev => [...prev, botMessage]);
-            console.log(`💬 Bot message #${responseCount} added to chat interface`);
+            setIsLoading(false);
             
-            // Check if there are more responses coming
-            if (botData.hasMore) {
-              console.log('🔄 More responses available, polling immediately...');
-              // Reset attempts for the next response
-              attempts = 0;
-              // Poll immediately for the next response (no delay)
-              setTimeout(poll, 100);
-              return;
+            if (isMultiPart) {
+              console.log(`💬 Combined bot message added to chat interface (${botData.response.partCount} parts)`);
             } else {
-              console.log(`✅ All responses received (total: ${responseCount}), stopping poll`);
-              setIsLoading(false);
-              return;
+              console.log('💬 Single bot message added to chat interface');
             }
+            return;
           } else {
             console.log('⏳ No bot response available yet, continuing to poll...');
           }
@@ -197,7 +194,6 @@ export default function Home() {
         if (attempts < maxAttempts) {
           setTimeout(poll, 1000);
         } else {
-          console.log(`❌ Max attempts reached, stopping poll (received ${responseCount} responses)`);
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
             text: "I'm taking longer than usual to respond. Please try sending your message again.",
@@ -208,11 +204,9 @@ export default function Home() {
         }
         
       } catch (error) {
-        console.error('❌ Polling error:', error);
         attempts++;
         
         if (attempts >= maxAttempts) {
-          console.log(`❌ Max attempts reached due to errors, stopping poll (received ${responseCount} responses)`);
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
             text: "I'm having trouble connecting right now. Please try again.",
