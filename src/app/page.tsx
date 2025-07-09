@@ -5,26 +5,8 @@ import { useState, useEffect } from 'react';
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
-// Message type definition
-interface Message {
-  id: string;
-  text: string;
-  isBot: boolean;
-  parts?: number;
-  partNumber?: number;
-  totalParts?: number;
-  batchId?: string;
-}
-
-// Bot response from backend
-interface BotMessagePart {
-  id: string;
-  text: string;
-  timestamp: number;
-}
-
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
@@ -175,49 +157,25 @@ export default function Home() {
           const botData = await botResponseRes.json();
           console.log('📡 Backend polling response:', botData);
           
-          if (botData.success && botData.response) {
-            const response = botData.response;
+          if (botData.success && (botData.responses || botData.response)) {
+            // Handle multiple responses (new format) or single response (backward compatibility)
+            const responses = botData.responses || [botData.response];
+            console.log(`✅ GOT ${responses.length} BOT RESPONSE(S):`);
             
-            // Handle new format with multiple messages
-            if (response.messages && Array.isArray(response.messages)) {
-              const messages = response.messages as BotMessagePart[];
-              const totalParts = response.totalParts || messages.length;
-              
-              console.log(`✅ GOT ${messages.length} BOT MESSAGE(S):`);
-              messages.forEach((msg: BotMessagePart, index: number) => {
-                console.log(`   Part ${index + 1}: "${msg.text}"`);
-              });
-              
-              // Add each message as a separate bubble
-              const botMessages = messages.map((msg: BotMessagePart, index: number) => ({
-                id: msg.id,
-                text: msg.text,
-                isBot: true,
-                partNumber: index + 1,
-                totalParts: totalParts,
-                batchId: response.batchId
-              }));
-              
-              setMessages(prev => [...prev, ...botMessages]);
-              setIsLoading(false);
-              console.log(`💬 ${messages.length} separate bot bubbles added to chat interface`);
-              return;
-            } else {
-              // Fallback for old single message format
-              const messageText = response.text;
-              console.log(`✅ GOT SINGLE BOT RESPONSE: "${messageText}"`);
-              
-              const botMessage = {
+            const botMessages = responses.map((response: any, index: number) => {
+              console.log(`   Response ${index + 1}: "${response.text}"`);
+              return {
                 id: response.id,
-                text: messageText,
+                text: response.text,
                 isBot: true
               };
-              
-              setMessages(prev => [...prev, botMessage]);
-              setIsLoading(false);
-              console.log(`💬 Single bot message added to chat interface`);
-              return;
-            }
+            });
+            
+            // Add all bot messages as separate bubbles
+            setMessages(prev => [...prev, ...botMessages]);
+            setIsLoading(false);
+            console.log(`💬 ${botMessages.length} bot message(s) added to chat interface as separate bubbles`);
+            return;
           } else {
             console.log('⏳ No bot response available yet, continuing to poll...');
           }
@@ -306,11 +264,6 @@ export default function Home() {
           >
             <div className="message-content">
               {message.text}
-              {message.isBot && message.totalParts && message.totalParts > 1 && (
-                <div className="message-parts-indicator">
-                  Part {message.partNumber} of {message.totalParts}
-                </div>
-              )}
             </div>
           </div>
         ))}
