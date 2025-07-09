@@ -49,6 +49,74 @@ const botResponses = new Map();
 // Track user messages to distinguish them from bot responses
 const userMessages = new Map();
 
+// Track multiple bot messages for batching
+const pendingBotMessages = new Map(); // conversationId -> { messages: [], timeout: timeoutId }
+
+// Function to handle multiple bot messages that come in sequence
+function handleMultipleBotMessages(conversationId, messageText) {
+  const BATCH_TIMEOUT = 3000; // Wait 3 seconds for more messages
+  
+  // Check if we already have pending messages for this conversation
+  let pending = pendingBotMessages.get(conversationId);
+  
+  if (pending) {
+    // Clear the existing timeout since we got another message
+    clearTimeout(pending.timeout);
+    console.log(`📥 ADDING TO EXISTING BATCH: Message ${pending.messages.length + 1}`);
+  } else {
+    // Create new pending batch
+    pending = { messages: [], timeout: null };
+    console.log(`📦 STARTING NEW MESSAGE BATCH for conversation: ${conversationId}`);
+  }
+  
+  // Add this message to the batch
+  pending.messages.push({
+    text: messageText,
+    timestamp: Date.now(),
+    id: `bot-${Date.now()}-${pending.messages.length}`
+  });
+  
+  console.log(`📊 BATCH STATUS: ${pending.messages.length} message(s) collected`);
+  console.log(`   Latest message: "${messageText}"`);
+  
+  // Set new timeout to process the batch
+  pending.timeout = setTimeout(() => {
+    console.log(`⏰ BATCH TIMEOUT REACHED - Processing ${pending.messages.length} message(s)`);
+    processBotMessageBatch(conversationId, pending.messages);
+    pendingBotMessages.delete(conversationId);
+  }, BATCH_TIMEOUT);
+  
+  // Update the pending messages
+  pendingBotMessages.set(conversationId, pending);
+}
+
+// Function to process a batch of bot messages
+function processBotMessageBatch(conversationId, messages) {
+  console.log(`🎯 PROCESSING BATCH: ${messages.length} message(s) for conversation ${conversationId}`);
+  
+  if (messages.length === 1) {
+    // Single message - store as is
+    const message = messages[0];
+    console.log(`📝 STORING SINGLE MESSAGE: "${message.text}"`);
+    botResponses.set(conversationId, message);
+  } else {
+    // Multiple messages - combine them
+    const combinedText = messages.map(msg => msg.text).join('\n\n');
+    const combinedMessage = {
+      text: combinedText,
+      timestamp: messages[0].timestamp,
+      id: `bot-combined-${Date.now()}`,
+      parts: messages.length
+    };
+    
+    console.log(`🔗 COMBINING ${messages.length} MESSAGES INTO ONE:`);
+    console.log(`   Combined text: "${combinedText}"`);
+    botResponses.set(conversationId, combinedMessage);
+  }
+  
+  console.log(`✅ BATCH PROCESSED AND STORED - Frontend can now retrieve it`);
+}
+
 app.post('/api/user', async (req, res) => {
   try {
     const response = await fetch(`${BASE_URL}/users`, {
@@ -229,16 +297,10 @@ app.post('/api/botpress-webhook', async (req, res) => {
       console.log('🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) - will store and display');
       
       if (conversationId && botText && !botText.includes('{{ $json')) {
-        console.log(`💾 STORING BOT RESPONSE: "${botText}"`);
+        console.log(`💾 RECEIVED BOT MESSAGE PART: "${botText}"`);
         
-        // Store the bot response so the frontend can retrieve it
-        botResponses.set(conversationId, {
-          text: botText,
-          timestamp: Date.now(),
-          id: `bot-${Date.now()}`
-        });
-        
-        console.log('✅ Bot response stored successfully for frontend polling');
+        // Handle multiple bot messages by batching them
+        handleMultipleBotMessages(conversationId, botText);
         
         // Clean up the tracked user message since we got a bot response
         userMessages.delete(conversationId);
@@ -272,18 +334,24 @@ app.post('/api/botpress-webhook', async (req, res) => {
       }
     }
     
-    // Clean up old responses and user messages (older than 5 minutes)
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    for (const [key, value] of botResponses.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        botResponses.delete(key);
-      }
-    }
-    for (const [key, value] of userMessages.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        userMessages.delete(key);
-      }
-    }
+         // Clean up old responses, user messages, and pending batches (older than 5 minutes)
+     const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+     for (const [key, value] of botResponses.entries()) {
+       if (value.timestamp < fiveMinutesAgo) {
+         botResponses.delete(key);
+       }
+     }
+     for (const [key, value] of userMessages.entries()) {
+       if (value.timestamp < fiveMinutesAgo) {
+         userMessages.delete(key);
+       }
+     }
+     for (const [key, value] of pendingBotMessages.entries()) {
+       if (value.messages.length > 0 && value.messages[0].timestamp < fiveMinutesAgo) {
+         clearTimeout(value.timeout);
+         pendingBotMessages.delete(key);
+       }
+     }
     
     res.json({ 
       success: true,
@@ -333,6 +401,7 @@ app.get('/api/botpress-webhook', async (req, res) => {
 app.get('/api/debug/stored-responses', async (req, res) => {
   const allResponses = {};
   const allUserMessages = {};
+  const allPendingMessages = {};
   
   for (const [key, value] of botResponses.entries()) {
     allResponses[key] = value;
@@ -342,19 +411,59 @@ app.get('/api/debug/stored-responses', async (req, res) => {
     allUserMessages[key] = value;
   }
   
+  for (const [key, value] of pendingBotMessages.entries()) {
+    allPendingMessages[key] = {
+      messageCount: value.messages.length,
+      messages: value.messages,
+      timeoutActive: value.timeout !== null
+    };
+  }
+  
   console.log('🔍 DEBUG ENDPOINT CALLED - Current storage state:');
   console.log(`   Bot responses: ${botResponses.size} stored`);
   console.log(`   User messages: ${userMessages.size} tracked`);
+  console.log(`   Pending message batches: ${pendingBotMessages.size} active`);
   
   res.json({ 
     totalBotResponses: botResponses.size,
     totalUserMessages: userMessages.size,
+    totalPendingBatches: pendingBotMessages.size,
     botResponses: allResponses,
     userMessages: allUserMessages,
+    pendingBatches: allPendingMessages,
     timestamp: Date.now()
   });
 });
 
+// Endpoint to manually flush pending message batches (for testing)
+app.post('/api/debug/flush-pending', async (req, res) => {
+  const { conversationId } = req.body;
+  
+  if (conversationId && pendingBotMessages.has(conversationId)) {
+    const pending = pendingBotMessages.get(conversationId);
+    clearTimeout(pending.timeout);
+    console.log(`🔧 MANUALLY FLUSHING BATCH for conversation: ${conversationId}`);
+    processBotMessageBatch(conversationId, pending.messages);
+    pendingBotMessages.delete(conversationId);
+    res.json({ success: true, flushed: true, messageCount: pending.messages.length });
+  } else if (!conversationId) {
+    // Flush all pending batches
+    let totalFlushed = 0;
+    for (const [convId, pending] of pendingBotMessages.entries()) {
+      clearTimeout(pending.timeout);
+      console.log(`🔧 MANUALLY FLUSHING BATCH for conversation: ${convId}`);
+      processBotMessageBatch(convId, pending.messages);
+      totalFlushed += pending.messages.length;
+    }
+    pendingBotMessages.clear();
+    res.json({ success: true, flushedAll: true, totalMessages: totalFlushed });
+  } else {
+    res.json({ success: false, message: 'No pending messages found for this conversation' });
+  }
+});
+
 const PORT = process.env.PORT;
 app.listen(PORT, () => {
+  console.log(`🚀 Backend server running on port ${PORT}`);
+  console.log(`📦 Multi-message batching enabled (${3000}ms timeout)`);
 }); 

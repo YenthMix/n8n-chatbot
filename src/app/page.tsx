@@ -5,8 +5,16 @@ import { useState, useEffect } from 'react';
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
+// Message type definition
+interface Message {
+  id: string;
+  text: string;
+  isBot: boolean;
+  parts?: number;
+}
+
 export default function Home() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
@@ -158,17 +166,25 @@ export default function Home() {
           console.log('📡 Backend polling response:', botData);
           
           if (botData.success && botData.response) {
-            console.log(`✅ GOT BOT RESPONSE: "${botData.response.text}"`);
+            const response = botData.response;
+            const messageText = response.text;
+            const partCount = response.parts || 1;
+            
+            console.log(`✅ GOT BOT RESPONSE: "${messageText}"`);
+            if (partCount > 1) {
+              console.log(`📊 COMBINED FROM ${partCount} PARTS`);
+            }
             
             const botMessage = {
-              id: botData.response.id,
-              text: botData.response.text,
-              isBot: true
+              id: response.id,
+              text: messageText,
+              isBot: true,
+              parts: partCount
             };
             
             setMessages(prev => [...prev, botMessage]);
             setIsLoading(false);
-            console.log('💬 Bot message added to chat interface');
+            console.log(`💬 Bot message added to chat interface${partCount > 1 ? ` (combined from ${partCount} parts)` : ''}`);
             return;
           } else {
             console.log('⏳ No bot response available yet, continuing to poll...');
@@ -258,6 +274,11 @@ export default function Home() {
           >
             <div className="message-content">
               {message.text}
+              {message.isBot && message.parts && message.parts > 1 && (
+                <div className="message-parts-indicator">
+                  📝 Combined from {message.parts} parts
+                </div>
+              )}
             </div>
           </div>
         ))}
