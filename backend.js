@@ -279,12 +279,13 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           // Set a timer to wait for more responses
           const timer = setTimeout(() => {
-            console.log(`⏰ TIMER EXPIRED - Processing ${responses.length} collected response(s)`);
+            console.log(`⏰ TIMER EXPIRED - Processing ${responses.length} collected response(s) for conversation: ${conversationId}`);
             
             if (responses.length === 1) {
               // Single response - store as before
               console.log(`📤 SINGLE RESPONSE: "${responses[0].text}"`);
               botResponses.set(conversationId, responses[0]);
+              console.log(`💾 STORED SINGLE RESPONSE for conversation: ${conversationId}`);
             } else {
               // Multiple responses - store as separate messages array
               console.log(`📤 STORING ${responses.length} SEPARATE RESPONSES AS INDIVIDUAL BUBBLES:`);
@@ -292,14 +293,21 @@ app.post('/api/botpress-webhook', async (req, res) => {
                 console.log(`   Part ${index + 1}: "${response.text}"`);
               });
               
-              botResponses.set(conversationId, {
+              const multiPartResponse = {
                 isMultiPart: true,
                 responses: responses,
                 timestamp: Date.now(),
                 id: `bot-multipart-${Date.now()}`,
                 partCount: responses.length
-              });
+              };
+              
+              botResponses.set(conversationId, multiPartResponse);
+              console.log(`💾 STORED MULTI-PART RESPONSE for conversation: ${conversationId}`);
+              console.log(`📋 Multi-part response structure:`, JSON.stringify(multiPartResponse, null, 2));
             }
+            
+            console.log(`📊 Total responses now stored: ${botResponses.size}`);
+            console.log(`📋 All stored conversation IDs: [${Array.from(botResponses.keys()).join(', ')}]`);
             
             // Clean up
             multipleResponses.delete(conversationId);
@@ -403,7 +411,12 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     const { conversationId } = req.params;
     const botResponse = botResponses.get(conversationId);
     
+    console.log(`🔍 FRONTEND POLLING for conversation: ${conversationId}`);
+    console.log(`📦 Found stored response:`, botResponse ? 'YES' : 'NO');
+    
     if (botResponse) {
+      console.log(`📤 SENDING RESPONSE TO FRONTEND:`, JSON.stringify(botResponse, null, 2));
+      
       // Remove the response after sending it to prevent duplicates
       botResponses.delete(conversationId);
       res.json({ 
@@ -411,12 +424,18 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
         response: botResponse 
       });
     } else {
+      console.log(`❌ NO RESPONSE AVAILABLE for conversation: ${conversationId}`);
+      console.log(`📊 Current stored responses: ${botResponses.size}`);
+      console.log(`📊 Current active collections: ${multipleResponses.size}`);
+      console.log(`📊 Current active timers: ${responseTimers.size}`);
+      
       res.json({ 
         success: false, 
         message: 'No bot response available' 
       });
     }
   } catch (error) {
+    console.error('❌ ERROR in bot-response endpoint:', error);
     res.status(500).json({ error: 'Failed to get bot response' });
   }
 });

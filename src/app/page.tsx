@@ -153,9 +153,20 @@ export default function Home() {
         console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} for conversation:`, conversationId);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
+        console.log(`📡 Response status: ${botResponseRes.status}`);
+        
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
           console.log('📡 Backend polling response:', botData);
+          console.log('📡 Response has success:', botData.success);
+          console.log('📡 Response has response:', !!botData.response);
+          
+          if (botData.response) {
+            console.log('📡 Response structure:', Object.keys(botData.response));
+            console.log('📡 Is multi-part:', botData.response.isMultiPart);
+            console.log('📡 Has responses array:', !!botData.response.responses);
+            console.log('📡 Has text field:', !!botData.response.text);
+          }
           
           if (botData.success && botData.response) {
             console.log(`✅ GOT BOT RESPONSE`);
