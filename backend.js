@@ -41,6 +41,14 @@ app.use(express.json());
 const API_ID = process.env.API_ID;
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
+// Configuration for multi-part responses
+let MULTI_PART_ENABLED = process.env.MULTI_PART_ENABLED !== 'false'; // Default: enabled
+let MULTI_PART_TIMER_MS = parseInt(process.env.MULTI_PART_TIMER_MS) || 3000; // Default: 3 seconds
+
+console.log('⚙️ Multi-part response configuration:');
+console.log(`   Enabled: ${MULTI_PART_ENABLED}`);
+console.log(`   Timer: ${MULTI_PART_TIMER_MS}ms`);
+
 
 
 // Store bot responses temporarily (in production, use Redis or database)
@@ -189,6 +197,14 @@ app.post('/api/botpress-webhook', async (req, res) => {
     console.log('🔄 WEBHOOK RECEIVED FROM N8N:');
     console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
     
+    // Quick response to N8N to prevent timeouts
+    const quickResponse = {
+      success: true,
+      received: true,
+      timestamp: Date.now(),
+      status: 'processing'
+    };
+    
     const body = req.body;
     let conversationId, botText, isBot;
     
@@ -235,62 +251,76 @@ app.post('/api/botpress-webhook', async (req, res) => {
       console.log('🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) - will store and display');
       
       if (conversationId && botText && !botText.includes('{{ $json')) {
-        console.log(`💾 COLLECTING BOT RESPONSE PART: "${botText}"`);
         
-        // Initialize array for this conversation if it doesn't exist
-        if (!multipleResponses.has(conversationId)) {
-          multipleResponses.set(conversationId, []);
-        }
-        
-        // Add this response to the collection
-        const responses = multipleResponses.get(conversationId);
-        responses.push({
-          text: botText,
-          timestamp: Date.now(),
-          id: `bot-${Date.now()}-part${responses.length + 1}`
-        });
-        
-        console.log(`📊 COLLECTED ${responses.length} RESPONSE PART(S) FOR CONVERSATION ${conversationId}`);
-        console.log(`   Latest part: "${botText}"`);
-        
-        // Clear any existing timer for this conversation
-        if (responseTimers.has(conversationId)) {
-          clearTimeout(responseTimers.get(conversationId));
-          console.log('⏰ Cleared existing timer - more parts incoming');
-        }
-        
-        // Set a timer to wait for more responses (3 seconds)
-        const timer = setTimeout(() => {
-          console.log(`⏰ TIMER EXPIRED - Processing ${responses.length} collected response(s)`);
+        if (MULTI_PART_ENABLED) {
+          console.log(`💾 COLLECTING BOT RESPONSE PART: "${botText}"`);
           
-          if (responses.length === 1) {
-            // Single response - store as before
-            console.log(`📤 SINGLE RESPONSE: "${responses[0].text}"`);
-            botResponses.set(conversationId, responses[0]);
-          } else {
-            // Multiple responses - combine them
-            const combinedText = responses.map((r, index) => `${r.text}`).join('\n\n');
-            console.log(`📤 COMBINED ${responses.length} RESPONSES INTO ONE MESSAGE:`);
-            console.log(`   Combined text: "${combinedText}"`);
-            
-            botResponses.set(conversationId, {
-              text: combinedText,
-              timestamp: Date.now(),
-              id: `bot-combined-${Date.now()}`,
-              partCount: responses.length
-            });
+          // Initialize array for this conversation if it doesn't exist
+          if (!multipleResponses.has(conversationId)) {
+            multipleResponses.set(conversationId, []);
           }
           
-          // Clean up
-          multipleResponses.delete(conversationId);
-          responseTimers.delete(conversationId);
-          userMessages.delete(conversationId);
+          // Add this response to the collection
+          const responses = multipleResponses.get(conversationId);
+          responses.push({
+            text: botText,
+            timestamp: Date.now(),
+            id: `bot-${Date.now()}-part${responses.length + 1}`
+          });
           
-          console.log(`✅ Bot response(s) finalized and ready for frontend polling`);
-        }, 3000); // Wait 3 seconds for additional parts
-        
-        responseTimers.set(conversationId, timer);
-        console.log(`⏰ SET TIMER: Waiting 3 seconds for additional response parts...`);
+          console.log(`📊 COLLECTED ${responses.length} RESPONSE PART(S) FOR CONVERSATION ${conversationId}`);
+          console.log(`   Latest part: "${botText}"`);
+          
+          // Clear any existing timer for this conversation
+          if (responseTimers.has(conversationId)) {
+            clearTimeout(responseTimers.get(conversationId));
+            console.log('⏰ Cleared existing timer - more parts incoming');
+          }
+          
+          // Set a timer to wait for more responses
+          const timer = setTimeout(() => {
+            console.log(`⏰ TIMER EXPIRED - Processing ${responses.length} collected response(s)`);
+            
+            if (responses.length === 1) {
+              // Single response - store as before
+              console.log(`📤 SINGLE RESPONSE: "${responses[0].text}"`);
+              botResponses.set(conversationId, responses[0]);
+            } else {
+              // Multiple responses - combine them
+              const combinedText = responses.map((r, index) => `${r.text}`).join('\n\n');
+              console.log(`📤 COMBINED ${responses.length} RESPONSES INTO ONE MESSAGE:`);
+              console.log(`   Combined text: "${combinedText}"`);
+              
+              botResponses.set(conversationId, {
+                text: combinedText,
+                timestamp: Date.now(),
+                id: `bot-combined-${Date.now()}`,
+                partCount: responses.length
+              });
+            }
+            
+            // Clean up
+            multipleResponses.delete(conversationId);
+            responseTimers.delete(conversationId);
+            userMessages.delete(conversationId);
+            
+            console.log(`✅ Bot response(s) finalized and ready for frontend polling`);
+          }, MULTI_PART_TIMER_MS);
+          
+          responseTimers.set(conversationId, timer);
+          console.log(`⏰ SET TIMER: Waiting ${MULTI_PART_TIMER_MS}ms for additional response parts...`);
+          
+        } else {
+          // Multi-part disabled - store immediately
+          console.log(`💾 STORING SINGLE BOT RESPONSE (multi-part disabled): "${botText}"`);
+          botResponses.set(conversationId, {
+            text: botText,
+            timestamp: Date.now(),
+            id: `bot-${Date.now()}`
+          });
+          userMessages.delete(conversationId);
+          console.log('✅ Bot response stored immediately');
+        }
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
@@ -345,12 +375,16 @@ app.post('/api/botpress-webhook', async (req, res) => {
       }
     }
     
+    // Respond to N8N immediately to prevent timeouts
     res.json({ 
       success: true,
       conversationId: conversationId,
       message: botText,
       isBot: isBot,
-      received: true
+      received: true,
+      multiPartEnabled: MULTI_PART_ENABLED,
+      processing: isBotMessage && MULTI_PART_ENABLED ? 'collecting' : 'immediate',
+      timestamp: Date.now()
     });
   } catch (error) {
     console.error('❌ WEBHOOK ERROR:', error);
@@ -387,6 +421,38 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
 
 app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
+});
+
+// Endpoint to temporarily disable/enable multi-part responses for testing
+app.post('/api/config/multipart', async (req, res) => {
+  const { enabled, timerMs } = req.body;
+  
+  if (typeof enabled === 'boolean') {
+    // This only works for the current session - restarting will reset to env vars
+    MULTI_PART_ENABLED = enabled;
+    console.log(`⚙️ Multi-part responses ${enabled ? 'ENABLED' : 'DISABLED'} via API`);
+  }
+  
+  if (timerMs && !isNaN(timerMs) && timerMs > 100 && timerMs < 10000) {
+    MULTI_PART_TIMER_MS = timerMs;
+    console.log(`⚙️ Multi-part timer set to ${timerMs}ms via API`);
+  }
+  
+  res.json({
+    success: true,
+    multiPartEnabled: MULTI_PART_ENABLED,
+    timerMs: MULTI_PART_TIMER_MS,
+    message: 'Configuration updated (session only - restart resets to env vars)'
+  });
+});
+
+app.get('/api/config/multipart', async (req, res) => {
+  res.json({
+    multiPartEnabled: MULTI_PART_ENABLED,
+    timerMs: MULTI_PART_TIMER_MS,
+    activeCollections: multipleResponses.size,
+    activeTimers: responseTimers.size
+  });
 });
 
 // Debug endpoint to see what's stored
