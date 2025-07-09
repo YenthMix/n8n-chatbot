@@ -286,15 +286,17 @@ app.post('/api/botpress-webhook', async (req, res) => {
               console.log(`📤 SINGLE RESPONSE: "${responses[0].text}"`);
               botResponses.set(conversationId, responses[0]);
             } else {
-              // Multiple responses - combine them
-              const combinedText = responses.map((r, index) => `${r.text}`).join('\n\n');
-              console.log(`📤 COMBINED ${responses.length} RESPONSES INTO ONE MESSAGE:`);
-              console.log(`   Combined text: "${combinedText}"`);
+              // Multiple responses - store as separate messages array
+              console.log(`📤 STORING ${responses.length} SEPARATE RESPONSES AS INDIVIDUAL BUBBLES:`);
+              responses.forEach((response, index) => {
+                console.log(`   Part ${index + 1}: "${response.text}"`);
+              });
               
               botResponses.set(conversationId, {
-                text: combinedText,
+                isMultiPart: true,
+                responses: responses,
                 timestamp: Date.now(),
-                id: `bot-combined-${Date.now()}`,
+                id: `bot-multipart-${Date.now()}`,
                 partCount: responses.length
               });
             }

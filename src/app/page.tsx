@@ -158,27 +158,49 @@ export default function Home() {
           console.log('📡 Backend polling response:', botData);
           
           if (botData.success && botData.response) {
-            console.log(`✅ GOT BOT RESPONSE: "${botData.response.text}"`);
+            console.log(`✅ GOT BOT RESPONSE`);
             
-            // Check if this is a combined response from multiple parts
-            const isMultiPart = botData.response.partCount && botData.response.partCount > 1;
-            const displayText = isMultiPart 
-              ? `${botData.response.text}\n\n📊 (Combined from ${botData.response.partCount} response parts)`
-              : botData.response.text;
-            
-            const botMessage = {
-              id: botData.response.id,
-              text: displayText,
-              isBot: true,
-              partCount: botData.response.partCount || 1
-            };
-            
-            setMessages(prev => [...prev, botMessage]);
-            setIsLoading(false);
-            
-            if (isMultiPart) {
-              console.log(`💬 Combined bot message added to chat interface (${botData.response.partCount} parts)`);
+            // Check if this is a multi-part response (separate bubbles)
+            if (botData.response.isMultiPart && botData.response.responses) {
+              console.log(`📬 MULTI-PART RESPONSE: ${botData.response.responses.length} separate bubbles`);
+              
+                             // Add each response as a separate bubble with a small delay
+               botData.response.responses.forEach((response: any, index: number) => {
+                setTimeout(() => {
+                  console.log(`💬 Adding bubble ${index + 1}/${botData.response.responses.length}: "${response.text}"`);
+                  
+                  const botMessage = {
+                    id: response.id,
+                    text: response.text,
+                    isBot: true,
+                    partNumber: index + 1,
+                    totalParts: botData.response.responses.length
+                  };
+                  
+                  setMessages(prev => [...prev, botMessage]);
+                  
+                  // Remove loading indicator after the last message
+                  if (index === botData.response.responses.length - 1) {
+                    setIsLoading(false);
+                    console.log(`✅ All ${botData.response.responses.length} bubbles added to chat interface`);
+                  }
+                }, index * 800); // 800ms delay between bubbles for natural feel
+              });
+              
             } else {
+              // Single response
+              console.log(`💬 SINGLE RESPONSE: "${botData.response.text}"`);
+              
+              const botMessage = {
+                id: botData.response.id,
+                text: botData.response.text,
+                isBot: true,
+                partNumber: 1,
+                totalParts: 1
+              };
+              
+              setMessages(prev => [...prev, botMessage]);
+              setIsLoading(false);
               console.log('💬 Single bot message added to chat interface');
             }
             return;
