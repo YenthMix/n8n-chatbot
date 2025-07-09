@@ -185,42 +185,43 @@ app.get('/api/messages', async (req, res) => {
 app.post('/api/botpress-webhook', async (req, res) => {
   try {
     const body = req.body;
-    let conversationId, botText;
+    console.log('FULL WEBHOOK DATA:', JSON.stringify(body, null, 2));
     
-    // Try multiple extraction patterns
+    let conversationId, incomingText, originalUserText;
+    
+    // Extract the incoming message and original user message from N8N
     if (body.body && body.body.data) {
       conversationId = body.body.data.conversationId;
-      botText = body.body.data.payload?.text || body.body.data.text;
+      incomingText = body.body.data.payload?.text || body.body.data.text;
+      // Look for the original user message in the webhook data
+      originalUserText = body.body.originalText || body.originalText || body.userText;
     } else if (body.conversationId) {
       conversationId = body.conversationId;
-      botText = body.payload?.text || body.text;
+      incomingText = body.payload?.text || body.text;
+      originalUserText = body.originalText || body.userText;
     } else if (body.text) {
-      botText = body.text;
+      incomingText = body.text;
+      originalUserText = body.originalText || body.userText;
     }
     
-    if (conversationId && botText && !botText.includes('{{ $json')) {
-      const storedUserMessage = userMessages.get(conversationId);
-      
-      console.log('WEBHOOK:', {
-        text: botText,
-        stored: storedUserMessage?.text,
-        different: storedUserMessage ? botText.trim() !== storedUserMessage.text.trim() : 'no stored message'
+    if (conversationId && incomingText && !incomingText.includes('{{ $json')) {
+      console.log('COMPARING:', {
+        incoming: incomingText,
+        original: originalUserText,
+        isUserMessage: originalUserText && incomingText.trim() === originalUserText.trim()
       });
       
-      if (storedUserMessage) {
-        if (botText.trim() !== storedUserMessage.text.trim()) {
-          console.log('STORING BOT RESPONSE:', botText);
-          botResponses.set(conversationId, {
-            text: botText,
-            timestamp: Date.now(),
-            id: `msg-${Date.now()}`,
-            isBot: true
-          });
-        } else {
-          console.log('IGNORING USER ECHO:', botText);
-        }
+      // Only store if it's NOT the user message echo
+      if (!originalUserText || incomingText.trim() !== originalUserText.trim()) {
+        console.log('STORING BOT RESPONSE:', incomingText);
+        botResponses.set(conversationId, {
+          text: incomingText,
+          timestamp: Date.now(),
+          id: `msg-${Date.now()}`,
+          isBot: true
+        });
       } else {
-        console.log('NO STORED USER MESSAGE FOR:', conversationId);
+        console.log('IGNORING USER ECHO:', incomingText);
       }
     }
     

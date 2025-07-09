@@ -82,19 +82,6 @@ export default function Home() {
     }
 
     try {
-      // FIRST: Store the user message so backend can compare against it
-      await fetch(`${BACKEND_URL}/api/track-user-message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversationId,
-          text: userMessage
-        })
-      });
-
-      // THEN: Send to N8N
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
         headers: {
