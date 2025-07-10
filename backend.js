@@ -86,22 +86,6 @@ app.post('/api/track-user-message', async (req, res) => {
     return res.status(400).json({ error: 'Missing conversationId or text' });
   }
   
-  // Clear any existing multi-part response for this conversation since user is sending a new message
-  const existingMultiPart = multiPartResponses.get(conversationId);
-  if (existingMultiPart) {
-    console.log(`🧹 CLEARING previous multi-part response for new user message`);
-    if (existingMultiPart.timeoutId) {
-      clearTimeout(existingMultiPart.timeoutId);
-    }
-    multiPartResponses.delete(conversationId);
-  }
-  
-  // Clear any existing bot response for this conversation
-  if (botResponses.has(conversationId)) {
-    console.log(`🧹 CLEARING previous bot response for new user message`);
-    botResponses.delete(conversationId);
-  }
-  
   // Store user message with timestamp to track what the user actually sent
   userMessages.set(conversationId, {
     text: text,
@@ -254,21 +238,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
       if (conversationId && botText && !botText.includes('{{ $json')) {
         console.log(`💾 COLLECTING BOT RESPONSE PART at ${botMessageTimestamp}: "${botText}"`);
         
-        // Check if this bot message is a response to the current tracked user message
-        const trackedUserMessage = userMessages.get(conversationId);
-        if (!trackedUserMessage) {
-          console.log(`⚠️ No tracked user message found - this might be a delayed response. Skipping.`);
-          res.json({ 
-            success: true,
-            conversationId: conversationId,
-            message: botText,
-            isBot: isBot,
-            received: true,
-            skipped: 'No tracked user message'
-          });
-          return;
-        }
-        
         // Get or create multi-part response tracking
         let multiPart = multiPartResponses.get(conversationId);
         if (!multiPart) {
@@ -276,31 +245,10 @@ app.post('/api/botpress-webhook', async (req, res) => {
             messages: [],
             lastReceived: Date.now(),
             isComplete: false,
-            timeoutId: null,
-            userMessageTimestamp: trackedUserMessage.timestamp // Track which user message this is responding to
+            timeoutId: null
           };
           multiPartResponses.set(conversationId, multiPart);
           console.log(`📦 Started new multi-part response collection for conversation: ${conversationId} at ${botMessageTimestamp}`);
-        }
-        
-        // Verify this response belongs to the current user message cycle
-        if (multiPart.userMessageTimestamp !== trackedUserMessage.timestamp) {
-          console.log(`⚠️ Bot response timestamp mismatch - this might be a response to an old message. Starting fresh.`);
-          
-          // Clear the old multi-part and start fresh
-          if (multiPart.timeoutId) {
-            clearTimeout(multiPart.timeoutId);
-          }
-          
-          multiPart = {
-            messages: [],
-            lastReceived: Date.now(),
-            isComplete: false,
-            timeoutId: null,
-            userMessageTimestamp: trackedUserMessage.timestamp
-          };
-          multiPartResponses.set(conversationId, multiPart);
-          console.log(`📦 Started fresh multi-part response collection for conversation: ${conversationId}`);
         }
         
         // Add this message part
