@@ -275,6 +275,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           console.log(`⏰ TIMEOUT: Finalizing multi-part response for ${conversationId} at ${finalizeTimestamp}`);
           console.log(`🎯 Final message count: ${multiPart.messages.length} parts`);
           
+          // Sort messages by timestamp to ensure correct order (first received = first in message)
+          const sortedMessages = multiPart.messages.sort((a, b) => a.timestamp - b.timestamp);
+          
           // Show timing info for each part (original order)
           console.log(`📋 Parts received timeline (original order):`);
           multiPart.messages.forEach((msg, index) => {
@@ -286,9 +289,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
           sortedMessages.forEach((msg, index) => {
             console.log(`   Position ${index + 1}: ${msg.receivedAt} - "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}"`);
           });
-          
-          // Sort messages by timestamp to ensure correct order (first received = first in message)
-          const sortedMessages = multiPart.messages.sort((a, b) => a.timestamp - b.timestamp);
           
           // Combine all parts into final response in chronological order
           const combinedText = sortedMessages.map(msg => msg.text).join('\n\n');
