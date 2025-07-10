@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
   const [messages, setMessages] = useState([
@@ -12,41 +12,20 @@ export default function Home() {
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isMultiPart, setIsMultiPart] = useState(false);
+  const [partsCollected, setPartsCollected] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    console.log(`🔧 FRONTEND CONFIG CHECK:`);
-    console.log(`   N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}`);
-    console.log(`   BACKEND_URL: ${BACKEND_URL}`);
-    console.log(`   Window location: ${window.location.href}`);
-    console.log(`   Environment: ${process.env.NODE_ENV}`);
-    
-    // Test backend connectivity immediately
-    fetch(`${BACKEND_URL}/api/debug/stored-responses`)
-      .then(res => {
-        console.log(`✅ BACKEND CONNECTIVITY TEST: Status ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        console.log(`✅ BACKEND RESPONSE:`, data);
-      })
-      .catch(err => {
-        console.error(`❌ BACKEND CONNECTIVITY FAILED:`, err);
-        console.error(`❌ Cannot reach backend at: ${BACKEND_URL}`);
-      });
-    
     initializeChatAPI();
   }, []);
 
   // Removed old polling mechanism - now using direct bot response endpoint
 
   const initializeChatAPI = async () => {
-    console.log(`🔄 STARTING CHAT API INITIALIZATION...`);
-    console.log(`🔄 Attempting to create user at: ${BACKEND_URL}/api/user`);
-    
     try {
       const userResponse = await fetch(`${BACKEND_URL}/api/user`, {
         method: 'POST',
@@ -55,11 +34,7 @@ export default function Home() {
         }
       });
       
-      console.log(`📡 User creation response status: ${userResponse.status}`);
-      
       if (!userResponse.ok) {
-        const errorText = await userResponse.text();
-        console.error(`❌ User creation failed with status ${userResponse.status}: ${errorText}`);
         throw new Error(`User creation failed: ${userResponse.status}`);
       }
       
@@ -180,108 +155,52 @@ export default function Home() {
         // Check for bot responses from N8N backend only
         const pollTimestamp = new Date().toISOString();
         console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation:`, conversationId);
-        console.log(`🔍 FRONTEND: Making request to: ${BACKEND_URL}/api/bot-response/${conversationId}`);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
           console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
           
-          // Extra debugging
-          if (botData.success && botData.response) {
-            console.log(`🔍 Full response object:`, JSON.stringify(botData.response, null, 2));
-          }
-          
           if (botData.success && botData.response) {
             const response = botData.response;
             const receivedTimestamp = new Date().toISOString();
+            console.log(`✅ GOT BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
             
-            console.log(`🔍 DEBUG: Response structure:`, {
-              isMultiPart: response.isMultiPart,
-              hasMessages: !!response.messages,
-              hasText: !!response.text,
-              partCount: response.partCount
-            });
-            
-            if (response.isMultiPart && response.messages) {
-              // Handle multi-part response - add each part as separate message
-              console.log(`✅ GOT MULTI-PART BOT RESPONSE at ${receivedTimestamp}: ${response.partCount} separate messages`);
-              
-              const botMessages = response.messages.map((part: any, index: number) => ({
-                id: part.id,
-                text: part.text,
-                isBot: true,
-                partNumber: index + 1,
-                totalParts: response.partCount,
-                receivedAt: receivedTimestamp,
-                originalTimestamp: part.receivedAt
-              }));
-              
-              // Add all parts as separate messages
-              setMessages(prev => [...prev, ...botMessages]);
-              setIsLoading(false);
-              
-              console.log(`💬 Added ${botMessages.length} separate bot messages to chat interface at ${receivedTimestamp}`);
+            // Log multi-part info if available
+            if (response.partCount && response.partCount > 1) {
+              console.log(`📝 Multi-part response received at ${receivedTimestamp}: ${response.partCount} parts combined`);
+              console.log(`📏 Total length: ${response.text.length} characters`);
               if (response.finalizedAt) {
                 console.log(`⏱️ Originally finalized at: ${response.finalizedAt}`);
               }
-              
-              // Log each part
-              response.messages.forEach((part: any, index: number) => {
-                console.log(`   Part ${index + 1}: "${part.text}" (received: ${part.receivedAt})`);
-              });
-              
-            } else if (response.text) {
-              // Handle single response
-              console.log(`✅ GOT SINGLE BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
-              
-              const botMessage = {
-                id: response.id,
-                text: response.text,
-                isBot: true,
-                partCount: response.partCount || 1,
-                receivedAt: receivedTimestamp
-              };
-              
-              setMessages(prev => [...prev, botMessage]);
-              setIsLoading(false);
-              console.log(`💬 Single bot message added to chat interface at ${receivedTimestamp}`);
-            } else {
-              // Fallback for unexpected response format
-              console.error(`❌ UNEXPECTED RESPONSE FORMAT:`, response);
-              console.error(`❌ Response has no usable text or messages array`);
-              
-              // Still try to display something if possible
-              const fallbackText = JSON.stringify(response);
-              const errorMessage = {
-                id: `error-${Date.now()}`,
-                text: `Error: Unexpected response format - ${fallbackText}`,
-                isBot: true,
-                receivedAt: receivedTimestamp
-              };
-              
-              setMessages(prev => [...prev, errorMessage]);
-              setIsLoading(false);
-              console.log(`⚠️ Added error message due to unexpected response format`);
             }
             
+            const botMessage = {
+              id: response.id,
+              text: response.text,
+              isBot: true,
+              partCount: response.partCount || 1,
+              receivedAt: receivedTimestamp
+            };
+            
+            setMessages(prev => [...prev, botMessage]);
+            setIsLoading(false);
+            setIsMultiPart(false);
+            setPartsCollected(0);
+            console.log(`💬 Bot message added to chat interface at ${receivedTimestamp} (${response.partCount || 1} parts)`);
             return;
           } else if (botData.message === 'Multi-part response in progress' && botData.partsCollected) {
             const progressTimestamp = botData.timestamp || new Date().toISOString();
             console.log(`📦 Multi-part response in progress at ${progressTimestamp}: ${botData.partsCollected} parts collected so far...`);
-            // Continue polling but show progress
+            // Update multi-part status and keep typing indicator active
+            setIsMultiPart(true);
+            setPartsCollected(botData.partsCollected);
+            // Note: isLoading stays true to keep the typing indicator showing
           } else {
             console.log(`⏳ No bot response available yet at ${new Date().toISOString()}, continuing to poll...`);
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
-          console.log(`❌ Response status text: ${botResponseRes.statusText}`);
-          try {
-            const errorText = await botResponseRes.text();
-            console.log(`❌ Error response body: ${errorText}`);
-          } catch (e) {
-            console.log(`❌ Could not read error response body`);
-          }
         }
         
         // No bot response available yet, try again
@@ -296,23 +215,23 @@ export default function Home() {
           };
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
+          setIsMultiPart(false);
+          setPartsCollected(0);
         }
         
       } catch (error) {
-        console.error(`❌ POLLING ERROR at attempt ${attempts + 1}:`, error);
-        console.error(`❌ BACKEND_URL: ${BACKEND_URL}`);
-        console.error(`❌ Conversation ID: ${conversationId}`);
-        
         attempts++;
         
         if (attempts >= maxAttempts) {
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
-            text: `I'm having trouble connecting right now. Please try again. (Error: ${error instanceof Error ? error.message : 'Unknown error'})`,
+            text: "I'm having trouble connecting right now. Please try again.",
             isBot: true
           };
           setMessages(prev => [...prev, errorMessage]);
           setIsLoading(false);
+          setIsMultiPart(false);
+          setPartsCollected(0);
         } else {
           setTimeout(poll, 1000);
         }
@@ -330,6 +249,8 @@ export default function Home() {
     const userMessage = inputValue.trim();
     setInputValue('');
     setIsLoading(true);
+    setIsMultiPart(false);
+    setPartsCollected(0);
     
     const userMessageObj = { id: `user-${Date.now()}`, text: userMessage, isBot: false };
     setMessages(prev => [...prev, userMessageObj]);
@@ -344,6 +265,8 @@ export default function Home() {
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
+      setIsMultiPart(false);
+      setPartsCollected(0);
     }
   };
 
@@ -382,7 +305,10 @@ export default function Home() {
                 <span></span>
               </div>
               <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
-                Bot is responding... (may be multi-part)
+                {isMultiPart 
+                  ? `Collecting response parts... (${partsCollected} received)`
+                  : "Bot is responding... (may be multi-part)"
+                }
               </div>
             </div>
           </div>
@@ -399,7 +325,9 @@ export default function Home() {
             !isConnected 
               ? "Connecting to Botpress..." 
               : isLoading 
-                ? "Bot is typing..." 
+                ? isMultiPart 
+                  ? `Bot is typing (${partsCollected} parts)...`
+                  : "Bot is typing..." 
                 : "Type your message here..."
           }
           className="message-input"
