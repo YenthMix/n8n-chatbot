@@ -84,8 +84,7 @@ export default function Home() {
 
     try {
       const sendTimestamp = new Date().toISOString();
-      console.log(`🔵 Tracking user message at ${sendTimestamp}: "${userMessage}" for conversation: "${conversationId}"`);
-      console.log(`🔑 Current conversation state:`, { conversationId, userKey, userId });
+      console.log(`🔵 Tracking user message at ${sendTimestamp}: "${userMessage}" for conversation: ${conversationId}`);
       
       // First, track the user message so backend can distinguish it from bot response
       const trackingResponse = await fetch(`${BACKEND_URL}/api/track-user-message`, {
@@ -153,76 +152,63 @@ export default function Home() {
       try {
         // Check for bot responses from N8N backend only
         const pollTimestamp = new Date().toISOString();
-        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation: "${conversationId}"`);
-        console.log(`🌐 Polling URL: ${BACKEND_URL}/api/bot-response/${conversationId}`);
+        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation:`, conversationId);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
           console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
           
-          // If no response, check debug endpoint for stored data
-          if (!botData.success) {
-            try {
-              const debugRes = await fetch(`${BACKEND_URL}/api/debug/stored-responses`);
-              if (debugRes.ok) {
-                const debugData = await debugRes.json();
-                console.log(`🐛 Debug - All stored responses:`, debugData);
-              }
-            } catch (debugError) {
-              console.log(`🐛 Debug endpoint failed:`, debugError);
-            }
-          }
-          
           if (botData.success && botData.response) {
             const response = botData.response;
             const receivedTimestamp = new Date().toISOString();
             
-            // Handle multi-part responses
-            if (response.isMultiPart) {
-              console.log(`✅ GOT MULTI-PART RESPONSE at ${receivedTimestamp} - Part ${response.partNumber}/${response.totalParts}: "${response.text}"`);
+            if (response.isMultiPart && response.messages) {
+              // Handle multi-part response - add each part as separate message
+              console.log(`✅ GOT MULTI-PART BOT RESPONSE at ${receivedTimestamp}: ${response.partCount} separate messages`);
               
-              const botMessage = {
-                id: response.id,
-                text: response.text,
+              const botMessages = response.messages.map((part: any, index: number) => ({
+                id: part.id,
+                text: part.text,
                 isBot: true,
-                partNumber: response.partNumber,
-                totalParts: response.totalParts,
-                receivedAt: receivedTimestamp
-              };
+                partNumber: index + 1,
+                totalParts: response.partCount,
+                receivedAt: receivedTimestamp,
+                originalTimestamp: part.receivedAt
+              }));
               
-              setMessages(prev => [...prev, botMessage]);
-              console.log(`💬 Part ${response.partNumber}/${response.totalParts} added to chat interface at ${receivedTimestamp}`);
+              // Add all parts as separate messages
+              setMessages(prev => [...prev, ...botMessages]);
+              setIsLoading(false);
               
-              // If this is the last part, stop polling
-              if (response.isLastPart) {
-                console.log(`🏁 All ${response.totalParts} parts received - stopping polling`);
-                setIsLoading(false);
-                return;
-              } else {
-                // Continue polling for next part with a short delay
-                console.log(`➡️ Waiting for next part (${response.totalParts - response.partNumber} remaining)...`);
-                setTimeout(() => {
-                  poll();
-                }, 500); // 0.5 second delay between parts for natural feel
-                return;
+              console.log(`💬 Added ${botMessages.length} separate bot messages to chat interface at ${receivedTimestamp}`);
+              if (response.finalizedAt) {
+                console.log(`⏱️ Originally finalized at: ${response.finalizedAt}`);
               }
+              
+              // Log each part
+              response.messages.forEach((part: any, index: number) => {
+                console.log(`   Part ${index + 1}: "${part.text}" (received: ${part.receivedAt})`);
+              });
+              
             } else {
-              // Handle single-part response (legacy)
+              // Handle single response
               console.log(`✅ GOT SINGLE BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
               
               const botMessage = {
                 id: response.id,
                 text: response.text,
                 isBot: true,
+                partCount: response.partCount || 1,
                 receivedAt: receivedTimestamp
               };
               
               setMessages(prev => [...prev, botMessage]);
               setIsLoading(false);
               console.log(`💬 Single bot message added to chat interface at ${receivedTimestamp}`);
-              return;
             }
+            
+            return;
           } else if (botData.message === 'Multi-part response in progress' && botData.partsCollected) {
             const progressTimestamp = botData.timestamp || new Date().toISOString();
             console.log(`📦 Multi-part response in progress at ${progressTimestamp}: ${botData.partsCollected} parts collected so far...`);
@@ -316,16 +302,6 @@ export default function Home() {
           >
             <div className="message-content">
               {message.text}
-              {message.isBot && (message as any).partNumber && (message as any).totalParts && (message as any).totalParts > 1 && (
-                <div style={{ 
-                  fontSize: '10px', 
-                  opacity: 0.6, 
-                  marginTop: '4px', 
-                  fontStyle: 'italic' 
-                }}>
-                  Part {(message as any).partNumber} of {(message as any).totalParts}
-                </div>
-              )}
             </div>
           </div>
         ))}
@@ -338,7 +314,7 @@ export default function Home() {
                 <span></span>
               </div>
               <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
-                Bot is responding... (may send multiple parts)
+                Bot is responding... (may be multi-part)
               </div>
             </div>
           </div>
