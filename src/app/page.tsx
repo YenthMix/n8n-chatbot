@@ -84,7 +84,8 @@ export default function Home() {
 
     try {
       const sendTimestamp = new Date().toISOString();
-      console.log(`🔵 Tracking user message at ${sendTimestamp}: "${userMessage}" for conversation: ${conversationId}`);
+      console.log(`🔵 Tracking user message at ${sendTimestamp}: "${userMessage}" for conversation: "${conversationId}"`);
+      console.log(`🔑 Current conversation state:`, { conversationId, userKey, userId });
       
       // First, track the user message so backend can distinguish it from bot response
       const trackingResponse = await fetch(`${BACKEND_URL}/api/track-user-message`, {
@@ -152,12 +153,26 @@ export default function Home() {
       try {
         // Check for bot responses from N8N backend only
         const pollTimestamp = new Date().toISOString();
-        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation:`, conversationId);
+        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation: "${conversationId}"`);
+        console.log(`🌐 Polling URL: ${BACKEND_URL}/api/bot-response/${conversationId}`);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
           console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
+          
+          // If no response, check debug endpoint for stored data
+          if (!botData.success) {
+            try {
+              const debugRes = await fetch(`${BACKEND_URL}/api/debug/stored-responses`);
+              if (debugRes.ok) {
+                const debugData = await debugRes.json();
+                console.log(`🐛 Debug - All stored responses:`, debugData);
+              }
+            } catch (debugError) {
+              console.log(`🐛 Debug endpoint failed:`, debugError);
+            }
+          }
           
           if (botData.success && botData.response) {
             const response = botData.response;

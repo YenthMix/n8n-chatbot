@@ -285,7 +285,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
           const finalTimestamp = Date.now();
           
           // Store the multi-part response with individual parts for frontend
-          botResponses.set(conversationId, {
+          const responseData = {
             isMultiPart: true,
             partCount: multiPart.messages.length,
             parts: multiPart.messages,
@@ -293,6 +293,15 @@ app.post('/api/botpress-webhook', async (req, res) => {
             timestamp: finalTimestamp,
             finalizedAt: finalizeTimestamp,
             id: `bot-multipart-${finalTimestamp}`
+          };
+          
+          botResponses.set(conversationId, responseData);
+          console.log(`🔐 STORED bot response with key: "${conversationId}"`);
+          console.log(`📦 Response data:`, {
+            isMultiPart: responseData.isMultiPart,
+            partCount: responseData.partCount,
+            currentPartIndex: responseData.currentPartIndex,
+            id: responseData.id
           });
           
           // Mark as complete and clean up
@@ -379,8 +388,17 @@ app.post('/api/botpress-webhook', async (req, res) => {
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
+    const requestTimestamp = new Date().toISOString();
+    console.log(`🔍 Frontend polling for conversation: "${conversationId}" at ${requestTimestamp}`);
+    
     const botResponse = botResponses.get(conversationId);
     const multiPart = multiPartResponses.get(conversationId);
+    
+    console.log(`📊 Current storage state for ${conversationId}:`);
+    console.log(`   botResponse exists: ${!!botResponse}`);
+    console.log(`   multiPart exists: ${!!multiPart}`);
+    console.log(`   Total botResponses stored: ${botResponses.size}`);
+    console.log(`   All stored conversation IDs: [${Array.from(botResponses.keys()).join(', ')}]`);
     
     if (botResponse) {
       const deliveryTimestamp = new Date().toISOString();
