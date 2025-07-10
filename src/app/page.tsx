@@ -159,9 +159,21 @@ export default function Home() {
           const botData = await botResponseRes.json();
           console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
           
+          // Extra debugging
+          if (botData.success && botData.response) {
+            console.log(`🔍 Full response object:`, JSON.stringify(botData.response, null, 2));
+          }
+          
           if (botData.success && botData.response) {
             const response = botData.response;
             const receivedTimestamp = new Date().toISOString();
+            
+            console.log(`🔍 DEBUG: Response structure:`, {
+              isMultiPart: response.isMultiPart,
+              hasMessages: !!response.messages,
+              hasText: !!response.text,
+              partCount: response.partCount
+            });
             
             if (response.isMultiPart && response.messages) {
               // Handle multi-part response - add each part as separate message
@@ -191,7 +203,7 @@ export default function Home() {
                 console.log(`   Part ${index + 1}: "${part.text}" (received: ${part.receivedAt})`);
               });
               
-            } else {
+            } else if (response.text) {
               // Handle single response
               console.log(`✅ GOT SINGLE BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
               
@@ -206,6 +218,23 @@ export default function Home() {
               setMessages(prev => [...prev, botMessage]);
               setIsLoading(false);
               console.log(`💬 Single bot message added to chat interface at ${receivedTimestamp}`);
+            } else {
+              // Fallback for unexpected response format
+              console.error(`❌ UNEXPECTED RESPONSE FORMAT:`, response);
+              console.error(`❌ Response has no usable text or messages array`);
+              
+              // Still try to display something if possible
+              const fallbackText = JSON.stringify(response);
+              const errorMessage = {
+                id: `error-${Date.now()}`,
+                text: `Error: Unexpected response format - ${fallbackText}`,
+                isBot: true,
+                receivedAt: receivedTimestamp
+              };
+              
+              setMessages(prev => [...prev, errorMessage]);
+              setIsLoading(false);
+              console.log(`⚠️ Added error message due to unexpected response format`);
             }
             
             return;

@@ -291,21 +291,44 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           const finalTimestamp = Date.now();
           
-          // Store individual messages instead of combining them
-          // This will allow each part to be displayed as separate chat bubbles
-          botResponses.set(conversationId, {
-            isMultiPart: true,
-            messages: multiPart.messages,  // Array of separate messages
-            timestamp: finalTimestamp,
-            finalizedAt: finalizeTimestamp,
-            id: `bot-multipart-${finalTimestamp}`,
-            partCount: multiPart.messages.length
-          });
+          // Check if this is actually multi-part or just a single message
+          const isActuallyMultiPart = multiPart.messages.length > 1;
+          
+          if (isActuallyMultiPart) {
+            // Store as multi-part response
+            botResponses.set(conversationId, {
+              isMultiPart: true,
+              messages: multiPart.messages,  // Array of separate messages
+              timestamp: finalTimestamp,
+              finalizedAt: finalizeTimestamp,
+              id: `bot-multipart-${finalTimestamp}`,
+              partCount: multiPart.messages.length
+            });
+            console.log(`📦 Stored as multi-part response (${multiPart.messages.length} parts)`);
+          } else {
+            // Store as single message for compatibility
+            const singleMessage = multiPart.messages[0];
+            botResponses.set(conversationId, {
+              text: singleMessage.text,
+              timestamp: finalTimestamp,
+              finalizedAt: finalizeTimestamp,
+              id: singleMessage.id,
+              isMultiPart: false,
+              partCount: 1,
+              receivedAt: singleMessage.receivedAt
+            });
+            console.log(`📦 Stored as single message response`);
+          }
           
           // Mark as complete and clean up
           multiPart.isComplete = true;
-          console.log(`✅ Multi-part bot response finalized and stored at ${finalizeTimestamp} (${multiPart.messages.length} separate messages)`);
-          console.log(`📄 Will display as ${multiPart.messages.length} individual chat bubbles`);
+          if (isActuallyMultiPart) {
+            console.log(`✅ Multi-part bot response finalized and stored at ${finalizeTimestamp} (${multiPart.messages.length} separate messages)`);
+            console.log(`📄 Will display as ${multiPart.messages.length} individual chat bubbles`);
+          } else {
+            console.log(`✅ Single bot response finalized and stored at ${finalizeTimestamp}`);
+            console.log(`📄 Will display as 1 chat bubble`);
+          }
           
           // Clean up the tracked user message since we got a bot response
           userMessages.delete(conversationId);
@@ -452,6 +475,30 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
 
 app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
+});
+
+// Simple test endpoint to verify bot response format
+app.get('/api/test/bot-message/:conversationId', async (req, res) => {
+  const { conversationId } = req.params;
+  const testTimestamp = new Date().toISOString();
+  
+  // Store a test bot response
+  botResponses.set(conversationId, {
+    text: "This is a test message from the backend!",
+    timestamp: Date.now(),
+    id: `test-${Date.now()}`,
+    isMultiPart: false,
+    partCount: 1,
+    receivedAt: testTimestamp
+  });
+  
+  console.log(`🧪 TEST: Stored test bot response for conversation ${conversationId} at ${testTimestamp}`);
+  
+  res.json({ 
+    success: true,
+    message: `Test bot response stored for conversation ${conversationId}`,
+    timestamp: testTimestamp
+  });
 });
 
 // Debug endpoint to see what's stored
