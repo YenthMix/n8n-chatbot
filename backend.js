@@ -236,7 +236,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
       console.log(`🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) at ${botMessageTimestamp} - will store and display`);
       
       if (conversationId && botText && !botText.includes('{{ $json')) {
-        console.log(`💾 STORING INDIVIDUAL BOT MESSAGE PART at ${botMessageTimestamp}: "${botText}"`);
+        console.log(`💾 COLLECTING BOT RESPONSE PART at ${botMessageTimestamp}: "${botText}"`);
         
         // Get or create multi-part response tracking
         let multiPart = multiPartResponses.get(conversationId);
@@ -245,42 +245,23 @@ app.post('/api/botpress-webhook', async (req, res) => {
             messages: [],
             lastReceived: Date.now(),
             isComplete: false,
-            timeoutId: null,
-            nextPartIndex: 0
+            timeoutId: null
           };
           multiPartResponses.set(conversationId, multiPart);
           console.log(`📦 Started new multi-part response collection for conversation: ${conversationId} at ${botMessageTimestamp}`);
         }
         
-        // Create individual message part
+        // Add this message part
         const partTimestamp = Date.now();
-        const partMessage = {
+        multiPart.messages.push({
           text: botText,
           timestamp: partTimestamp,
           receivedAt: botMessageTimestamp,
-          id: `bot-part-${partTimestamp}-${multiPart.messages.length}`,
-          partIndex: multiPart.messages.length,
-          conversationId: conversationId
-        };
-        
-        // Add to tracking
-        multiPart.messages.push(partMessage);
+          id: `bot-part-${partTimestamp}-${multiPart.messages.length}`
+        });
         multiPart.lastReceived = partTimestamp;
         
-        // IMMEDIATELY store this individual part for frontend polling
-        const partKey = `${conversationId}-part-${partMessage.partIndex}`;
-        botResponses.set(partKey, {
-          text: botText,
-          timestamp: partTimestamp,
-          receivedAt: botMessageTimestamp,
-          id: partMessage.id,
-          partIndex: partMessage.partIndex,
-          isIndividualPart: true,
-          conversationId: conversationId
-        });
-        
-        console.log(`📝 IMMEDIATELY STORED message part ${multiPart.messages.length} at ${botMessageTimestamp}: "${botText}"`);
-        console.log(`📊 Part stored with key: ${partKey}`);
+        console.log(`📝 Added message part ${multiPart.messages.length} at ${botMessageTimestamp}: "${botText}"`);
         console.log(`📊 Total parts collected so far: ${multiPart.messages.length}`);
         
         // Clear any existing timeout
@@ -288,10 +269,10 @@ app.post('/api/botpress-webhook', async (req, res) => {
           clearTimeout(multiPart.timeoutId);
         }
         
-        // Set timeout to mark response as complete (wait 3 seconds for more parts)
+        // Set timeout to finalize response (wait 3 seconds for more parts)
         multiPart.timeoutId = setTimeout(() => {
           const finalizeTimestamp = new Date().toISOString();
-          console.log(`⏰ TIMEOUT: Marking multi-part response as complete for ${conversationId} at ${finalizeTimestamp}`);
+          console.log(`⏰ TIMEOUT: Finalizing multi-part response for ${conversationId} at ${finalizeTimestamp}`);
           console.log(`🎯 Final message count: ${multiPart.messages.length} parts`);
           
           // Show timing info for each part
@@ -300,16 +281,31 @@ app.post('/api/botpress-webhook', async (req, res) => {
             console.log(`   Part ${index + 1}: ${msg.receivedAt} - "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}"`);
           });
           
-          // Mark as complete - no more parts expected
+          // Combine all parts into final response
+          const combinedText = multiPart.messages.map(msg => msg.text).join('\n\n');
+          const finalTimestamp = Date.now();
+          
+          // Store the combined response for frontend polling
+          botResponses.set(conversationId, {
+            text: combinedText,
+            timestamp: finalTimestamp,
+            finalizedAt: finalizeTimestamp,
+            id: `bot-combined-${finalTimestamp}`,
+            partCount: multiPart.messages.length,
+            parts: multiPart.messages
+          });
+          
+          // Mark as complete and clean up
           multiPart.isComplete = true;
-          console.log(`✅ Multi-part response marked as complete at ${finalizeTimestamp} (${multiPart.messages.length} parts)`);
+          console.log(`✅ Multi-part bot response finalized and stored at ${finalizeTimestamp} (${multiPart.messages.length} parts)`);
+          console.log(`📄 Combined text length: ${combinedText.length} characters`);
           
           // Clean up the tracked user message since we got a bot response
           userMessages.delete(conversationId);
           
         }, 3000); // Wait 3 seconds for additional parts
         
-        console.log(`⏱️ Part immediately available for frontend. Waiting 3 seconds for additional parts...`);
+        console.log(`⏱️ Waiting 3 seconds for additional message parts...`);
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
@@ -378,93 +374,57 @@ app.post('/api/botpress-webhook', async (req, res) => {
   }
 });
 
-// New endpoint for frontend to get individual bot message parts
+// New endpoint for frontend to get bot responses
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
+    const botResponse = botResponses.get(conversationId);
     const multiPart = multiPartResponses.get(conversationId);
     
-    if (!multiPart) {
-      // No conversation tracking found
-      res.json({ 
-        success: false, 
-        message: 'No conversation found',
-        allPartsDelivered: true
-      });
-      return;
-    }
-    
-    // Look for the next undelivered part
-    const nextPartKey = `${conversationId}-part-${multiPart.nextPartIndex || 0}`;
-    const nextPart = botResponses.get(nextPartKey);
-    
-    if (nextPart) {
+    if (botResponse) {
       const deliveryTimestamp = new Date().toISOString();
-      console.log(`📤 Sending individual bot message part ${nextPart.partIndex + 1} to frontend at ${deliveryTimestamp}:`);
-      console.log(`   💬 Text: "${nextPart.text.substring(0, 100)}${nextPart.text.length > 100 ? '...' : ''}"`);
-      console.log(`   🔢 Part ${nextPart.partIndex + 1} of ${multiPart.messages.length} collected so far`);
-      console.log(`   ⏱️ Originally received at: ${nextPart.receivedAt}`);
+      console.log(`📤 Sending bot response to frontend at ${deliveryTimestamp}:`);
+      console.log(`   💬 Text: "${botResponse.text.substring(0, 100)}${botResponse.text.length > 100 ? '...' : ''}"`);
+      console.log(`   🔢 Part count: ${botResponse.partCount || 1}`);
+      console.log(`   📏 Total length: ${botResponse.text.length} characters`);
+      if (botResponse.finalizedAt) {
+        console.log(`   ⏱️ Originally finalized at: ${botResponse.finalizedAt}`);
+      }
       
-      // Remove the delivered part
-      botResponses.delete(nextPartKey);
+      // Remove the response after sending it to prevent duplicates
+      botResponses.delete(conversationId);
       
-      // Update next part index
-      multiPart.nextPartIndex = (multiPart.nextPartIndex || 0) + 1;
-      
-      res.json({ 
-        success: true, 
-        response: {
-          text: nextPart.text,
-          id: nextPart.id,
-          partIndex: nextPart.partIndex,
-          timestamp: nextPart.timestamp,
-          receivedAt: nextPart.receivedAt,
-          isIndividualPart: true
-        },
-        morePartsExpected: !multiPart.isComplete,
-        totalPartsCollected: multiPart.messages.length,
-        partNumber: nextPart.partIndex + 1
-      });
-      
-    } else {
-      // No more parts available right now
-      if (multiPart.isComplete) {
-        // All parts have been collected and delivered
-        const allDeliveredTimestamp = new Date().toISOString();
-        console.log(`✅ All bot message parts delivered for conversation ${conversationId} at ${allDeliveredTimestamp}`);
-        console.log(`🧹 Cleaning up multi-part tracking for conversation: ${conversationId}`);
-        
-        // Clean up multi-part tracking
+      // Clean up multi-part tracking
+      if (multiPart) {
         if (multiPart.timeoutId) {
           clearTimeout(multiPart.timeoutId);
         }
         multiPartResponses.delete(conversationId);
-        
-        // Clean up user message tracking
-        userMessages.delete(conversationId);
-        
+        console.log(`🧹 Cleaned up multi-part tracking for conversation: ${conversationId}`);
+      }
+      
+      res.json({ 
+        success: true, 
+        response: botResponse
+      });
+    } else {
+      // Check if we're still collecting parts
+      if (multiPart && !multiPart.isComplete) {
+        const collectingTimestamp = new Date().toISOString();
+        console.log(`⏳ Still collecting message parts at ${collectingTimestamp} (${multiPart.messages.length} so far)...`);
         res.json({ 
           success: false, 
-          message: 'All parts delivered',
-          allPartsDelivered: true,
-          totalPartsDelivered: multiPart.messages.length
+          message: 'Multi-part response in progress',
+          partsCollected: multiPart.messages.length,
+          timestamp: collectingTimestamp
         });
       } else {
-        // Still waiting for more parts
-        const waitingTimestamp = new Date().toISOString();
-        console.log(`⏳ Waiting for more message parts at ${waitingTimestamp} (${multiPart.messages.length} collected, ${multiPart.nextPartIndex || 0} delivered)...`);
-        
         res.json({ 
           success: false, 
-          message: 'Waiting for more parts',
-          morePartsExpected: true,
-          partsCollected: multiPart.messages.length,
-          partsDelivered: multiPart.nextPartIndex || 0,
-          timestamp: waitingTimestamp
+          message: 'No bot response available' 
         });
       }
     }
-    
   } catch (error) {
     console.error('❌ Error getting bot response:', error);
     res.status(500).json({ error: 'Failed to get bot response' });
@@ -495,12 +455,9 @@ app.get('/api/debug/stored-responses', async (req, res) => {
       lastReceived: value.lastReceived,
       isComplete: value.isComplete,
       hasTimeout: !!value.timeoutId,
-      nextPartIndex: value.nextPartIndex || 0,
       messages: value.messages.map(msg => ({ 
         text: msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : ''),
         timestamp: msg.timestamp,
-        receivedAt: msg.receivedAt,
-        partIndex: msg.partIndex,
         id: msg.id
       }))
     };

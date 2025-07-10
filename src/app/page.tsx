@@ -145,16 +145,14 @@ export default function Home() {
       return;
     }
 
-    let partsReceived = 0;
-    let pollCount = 0;
-    const maxAttempts = 20; // Increased for individual parts
+    const maxAttempts = 15;
+    let attempts = 0;
 
     const poll = async () => {
       try {
-        pollCount++;
+        // Check for bot responses from N8N backend only
         const pollTimestamp = new Date().toISOString();
-        console.log(`🔍 Polling for individual part #${partsReceived + 1} - attempt ${pollCount}/${maxAttempts} at ${pollTimestamp}`);
-        
+        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation:`, conversationId);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
@@ -162,71 +160,50 @@ export default function Home() {
           console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
           
           if (botData.success && botData.response) {
-            // Got an individual message part!
             const response = botData.response;
             const receivedTimestamp = new Date().toISOString();
-            partsReceived++;
+            console.log(`✅ GOT BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
             
-            console.log(`✅ GOT INDIVIDUAL BOT MESSAGE PART ${botData.partNumber} at ${receivedTimestamp}: "${response.text}"`);
-            console.log(`📝 Part ${botData.partNumber} of ${botData.totalPartsCollected} collected so far`);
-            console.log(`⏱️ Originally received at: ${response.receivedAt}`);
+            // Log multi-part info if available
+            if (response.partCount && response.partCount > 1) {
+              console.log(`📝 Multi-part response received at ${receivedTimestamp}: ${response.partCount} parts combined`);
+              console.log(`📏 Total length: ${response.text.length} characters`);
+              if (response.finalizedAt) {
+                console.log(`⏱️ Originally finalized at: ${response.finalizedAt}`);
+              }
+            }
             
-            // Create individual message bubble
             const botMessage = {
               id: response.id,
               text: response.text,
               isBot: true,
-              partIndex: response.partIndex,
-              partNumber: botData.partNumber,
-              receivedAt: receivedTimestamp,
-              isIndividualPart: true
+              partCount: response.partCount || 1,
+              receivedAt: receivedTimestamp
             };
             
-            // Add this individual part as a separate message bubble
             setMessages(prev => [...prev, botMessage]);
-            console.log(`💬 Individual bot message part ${botData.partNumber} added to chat interface at ${receivedTimestamp}`);
-            
-            // Reset poll count since we got a part
-            pollCount = 0;
-            
-            // Check if more parts are expected
-            if (botData.morePartsExpected) {
-              console.log(`⏭️ More parts expected, continuing to poll for part #${partsReceived + 1}...`);
-              setTimeout(poll, 500); // Faster polling for real-time feel
-              return;
-            } else {
-              console.log(`🏁 No more parts expected, finishing polling.`);
-              setIsLoading(false);
-              return;
-            }
-            
-          } else if (botData.allPartsDelivered) {
-            // All parts have been delivered
-            console.log(`🏁 All bot message parts delivered (${botData.totalPartsDelivered || partsReceived} total) at ${pollTimestamp}`);
             setIsLoading(false);
+            console.log(`💬 Bot message added to chat interface at ${receivedTimestamp} (${response.partCount || 1} parts)`);
             return;
-            
-          } else if (botData.morePartsExpected) {
-            // Still waiting for more parts
-            const waitingTimestamp = botData.timestamp || new Date().toISOString();
-            console.log(`⏳ Waiting for more parts at ${waitingTimestamp} - ${botData.partsCollected} collected, ${botData.partsDelivered} delivered`);
-            // Continue polling
-            
+          } else if (botData.message === 'Multi-part response in progress' && botData.partsCollected) {
+            const progressTimestamp = botData.timestamp || new Date().toISOString();
+            console.log(`📦 Multi-part response in progress at ${progressTimestamp}: ${botData.partsCollected} parts collected so far...`);
+            // Continue polling but show progress
           } else {
-            console.log(`⏳ No new parts available yet at ${pollTimestamp}, continuing to poll...`);
+            console.log(`⏳ No bot response available yet at ${new Date().toISOString()}, continuing to poll...`);
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
         }
         
-        // Continue polling if we haven't hit max attempts
-        if (pollCount < maxAttempts) {
+        // No bot response available yet, try again
+        attempts++;
+        if (attempts < maxAttempts) {
           setTimeout(poll, 1000);
         } else {
-          console.log(`⏰ Max polling attempts reached (${maxAttempts}), stopping polling`);
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
-            text: `I received ${partsReceived} message parts but may have more to say. Please try sending another message.`,
+            text: "I'm taking longer than usual to respond. Please try sending your message again.",
             isBot: true
           };
           setMessages(prev => [...prev, timeoutMessage]);
@@ -234,10 +211,9 @@ export default function Home() {
         }
         
       } catch (error) {
-        console.error('❌ Polling error:', error);
-        pollCount++;
+        attempts++;
         
-        if (pollCount >= maxAttempts) {
+        if (attempts >= maxAttempts) {
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
             text: "I'm having trouble connecting right now. Please try again.",
@@ -314,7 +290,7 @@ export default function Home() {
                 <span></span>
               </div>
               <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
-                Bot is responding... (individual parts will appear one by one)
+                Bot is responding... (may be multi-part)
               </div>
             </div>
           </div>
