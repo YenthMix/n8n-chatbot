@@ -83,7 +83,8 @@ export default function Home() {
     }
 
     try {
-      console.log(`🔵 Tracking user message: "${userMessage}" for conversation: ${conversationId}`);
+      const sendTimestamp = new Date().toISOString();
+      console.log(`🔵 Tracking user message at ${sendTimestamp}: "${userMessage}" for conversation: ${conversationId}`);
       
       // First, track the user message so backend can distinguish it from bot response
       const trackingResponse = await fetch(`${BACKEND_URL}/api/track-user-message`, {
@@ -103,12 +104,12 @@ export default function Home() {
       }
 
       const trackingResult = await trackingResponse.json();
-      console.log('✅ User message tracking response:', trackingResult);
+      console.log(`✅ User message tracking response at ${sendTimestamp}:`, trackingResult);
 
       // Small delay to ensure tracking is processed
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      console.log(`🚀 Sending to N8N: "${userMessage}"`);
+      console.log(`🚀 Sending to N8N at ${sendTimestamp}: "${userMessage}"`);
       
       // Then send to N8N
       const response = await fetch(N8N_WEBHOOK_URL, {
@@ -150,39 +151,46 @@ export default function Home() {
     const poll = async () => {
       try {
         // Check for bot responses from N8N backend only
-        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} for conversation:`, conversationId);
+        const pollTimestamp = new Date().toISOString();
+        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation:`, conversationId);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
-          console.log('📡 Backend polling response:', botData);
+          console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
           
           if (botData.success && botData.response) {
             const response = botData.response;
-            console.log(`✅ GOT BOT RESPONSE: "${response.text}"`);
+            const receivedTimestamp = new Date().toISOString();
+            console.log(`✅ GOT BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
             
             // Log multi-part info if available
             if (response.partCount && response.partCount > 1) {
-              console.log(`📝 Multi-part response received: ${response.partCount} parts combined`);
+              console.log(`📝 Multi-part response received at ${receivedTimestamp}: ${response.partCount} parts combined`);
               console.log(`📏 Total length: ${response.text.length} characters`);
+              if (response.finalizedAt) {
+                console.log(`⏱️ Originally finalized at: ${response.finalizedAt}`);
+              }
             }
             
             const botMessage = {
               id: response.id,
               text: response.text,
               isBot: true,
-              partCount: response.partCount || 1
+              partCount: response.partCount || 1,
+              receivedAt: receivedTimestamp
             };
             
             setMessages(prev => [...prev, botMessage]);
             setIsLoading(false);
-            console.log(`💬 Bot message added to chat interface (${response.partCount || 1} parts)`);
+            console.log(`💬 Bot message added to chat interface at ${receivedTimestamp} (${response.partCount || 1} parts)`);
             return;
           } else if (botData.message === 'Multi-part response in progress' && botData.partsCollected) {
-            console.log(`📦 Multi-part response in progress: ${botData.partsCollected} parts collected so far...`);
+            const progressTimestamp = botData.timestamp || new Date().toISOString();
+            console.log(`📦 Multi-part response in progress at ${progressTimestamp}: ${botData.partsCollected} parts collected so far...`);
             // Continue polling but show progress
           } else {
-            console.log('⏳ No bot response available yet, continuing to poll...');
+            console.log(`⏳ No bot response available yet at ${new Date().toISOString()}, continuing to poll...`);
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
@@ -219,7 +227,8 @@ export default function Home() {
       }
     };
 
-    console.log('🚀 Starting to poll for bot response in 2 seconds...');
+    const startPollTimestamp = new Date().toISOString();
+    console.log(`🚀 Starting to poll for bot response at ${startPollTimestamp} in 2 seconds...`);
     setTimeout(poll, 2000);
   };
 
