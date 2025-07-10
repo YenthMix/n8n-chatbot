@@ -18,6 +18,10 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+    console.log(`🔧 FRONTEND CONFIG CHECK:`);
+    console.log(`   N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}`);
+    console.log(`   BACKEND_URL: ${BACKEND_URL}`);
+    
     initializeChatAPI();
   }, []);
 
@@ -153,6 +157,7 @@ export default function Home() {
         // Check for bot responses from N8N backend only
         const pollTimestamp = new Date().toISOString();
         console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation:`, conversationId);
+        console.log(`🔍 FRONTEND: Making request to: ${BACKEND_URL}/api/bot-response/${conversationId}`);
         const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
         
         if (botResponseRes.ok) {
@@ -247,6 +252,13 @@ export default function Home() {
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
+          console.log(`❌ Response status text: ${botResponseRes.statusText}`);
+          try {
+            const errorText = await botResponseRes.text();
+            console.log(`❌ Error response body: ${errorText}`);
+          } catch (e) {
+            console.log(`❌ Could not read error response body`);
+          }
         }
         
         // No bot response available yet, try again
@@ -264,12 +276,16 @@ export default function Home() {
         }
         
       } catch (error) {
+        console.error(`❌ POLLING ERROR at attempt ${attempts + 1}:`, error);
+        console.error(`❌ BACKEND_URL: ${BACKEND_URL}`);
+        console.error(`❌ Conversation ID: ${conversationId}`);
+        
         attempts++;
         
         if (attempts >= maxAttempts) {
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
-            text: "I'm having trouble connecting right now. Please try again.",
+            text: `I'm having trouble connecting right now. Please try again. (Error: ${error instanceof Error ? error.message : 'Unknown error'})`,
             isBot: true
           };
           setMessages(prev => [...prev, errorMessage]);

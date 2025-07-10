@@ -411,8 +411,17 @@ app.post('/api/botpress-webhook', async (req, res) => {
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
+    const requestTimestamp = new Date().toISOString();
+    console.log(`🔍 FRONTEND POLLING at ${requestTimestamp} for conversation: ${conversationId}`);
+    
     const botResponse = botResponses.get(conversationId);
     const multiPart = multiPartResponses.get(conversationId);
+    
+    console.log(`🔍 STORAGE CHECK:`);
+    console.log(`   Bot responses in storage: ${botResponses.size}`);
+    console.log(`   Multi-part responses in progress: ${multiPartResponses.size}`);
+    console.log(`   Found bot response for this conversation: ${!!botResponse}`);
+    console.log(`   Found multi-part for this conversation: ${!!multiPart}`);
     
     if (botResponse) {
       const deliveryTimestamp = new Date().toISOString();
@@ -461,9 +470,19 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
           timestamp: collectingTimestamp
         });
       } else {
+        console.log(`❌ NO BOT RESPONSE FOUND for conversation: ${conversationId}`);
+        console.log(`🔍 Available conversation IDs in botResponses:`, Array.from(botResponses.keys()));
+        console.log(`🔍 Available conversation IDs in multiPartResponses:`, Array.from(multiPartResponses.keys()));
+        
         res.json({ 
           success: false, 
-          message: 'No bot response available' 
+          message: 'No bot response available',
+          debug: {
+            requestedConversationId: conversationId,
+            availableBotResponses: Array.from(botResponses.keys()),
+            availableMultiPart: Array.from(multiPartResponses.keys()),
+            timestamp: new Date().toISOString()
+          }
         });
       }
     }
