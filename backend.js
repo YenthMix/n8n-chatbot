@@ -288,41 +288,55 @@ app.post('/api/botpress-webhook', async (req, res) => {
           multiPartResponses.set(conversationId, multiPart);
           console.log(`📦 Started new multi-part response collection for conversation: ${conversationId} at ${botMessageTimestamp}`);
         } else {
-          console.log(`⚠️ WARNING: Found existing multi-part response for ${conversationId}`);
-          console.log(`   Started at: ${multiPart.startedAt}`);
-          console.log(`   Current parts: ${multiPart.messages.length}`);
-          console.log(`   This might cause message mixing - clearing and restarting`);
+          // Check if this is a legitimate continuation of multi-part response (within reasonable time)
+          const timeSinceLastMessage = Date.now() - multiPart.lastReceived;
+          const isRecentContinuation = timeSinceLastMessage < 10000; // Within 10 seconds
           
-          // Clear old timeout
-          if (multiPart.timeoutId) {
-            clearTimeout(multiPart.timeoutId);
+          if (isRecentContinuation && !multiPart.isComplete) {
+            console.log(`✅ Continuing existing multi-part response for ${conversationId}`);
+            console.log(`   Started at: ${multiPart.startedAt}`);
+            console.log(`   Current parts: ${multiPart.messages.length}`);
+            console.log(`   Time since last: ${timeSinceLastMessage}ms`);
+            // Continue with existing multi-part response - just clear old timeout
+            if (multiPart.timeoutId) {
+              clearTimeout(multiPart.timeoutId);
+            }
+          } else {
+            console.log(`⚠️ Found old/completed multi-part response for ${conversationId}`);
+            console.log(`   Started at: ${multiPart.startedAt}`);
+            console.log(`   Current parts: ${multiPart.messages.length}`);
+            console.log(`   Time since last: ${timeSinceLastMessage}ms`);
+            console.log(`   Starting fresh collection`);
+            
+            // Clear old timeout
+            if (multiPart.timeoutId) {
+              clearTimeout(multiPart.timeoutId);
+            }
+            
+            // Start fresh for new message cycle
+            multiPart = {
+              messages: [],
+              lastReceived: Date.now(),
+              isComplete: false,
+              timeoutId: null,
+              startedAt: botMessageTimestamp
+            };
+            multiPartResponses.set(conversationId, multiPart);
+            console.log(`🔄 Started fresh multi-part response collection`);
           }
-          
-          // Start fresh to prevent message mixing
-          multiPart = {
-            messages: [],
-            lastReceived: Date.now(),
-            isComplete: false,
-            timeoutId: null,
-            startedAt: botMessageTimestamp
-          };
-          multiPartResponses.set(conversationId, multiPart);
-          console.log(`🔄 Restarted multi-part response collection to prevent mixing`);
         }
         
-        // Check if this message part is a duplicate or very similar to existing parts
-        const isDuplicate = multiPart.messages.some(existingMsg => 
-          existingMsg.text === botText || 
-          existingMsg.text.includes(botText) || 
-          botText.includes(existingMsg.text)
+        // Check if this message part is an exact duplicate only (not just similar)
+        const isExactDuplicate = multiPart.messages.some(existingMsg => 
+          existingMsg.text.trim() === botText.trim()
         );
         
-        if (isDuplicate) {
-          console.log(`⚠️ DUPLICATE/SIMILAR MESSAGE DETECTED: "${botText}"`);
-          console.log(`   Skipping to prevent message mixing`);
-          // Don't add duplicate parts, just reset timeout
+        if (isExactDuplicate) {
+          console.log(`⚠️ EXACT DUPLICATE MESSAGE DETECTED: "${botText}"`);
+          console.log(`   Skipping exact duplicate`);
+          // Don't add exact duplicates, just reset timeout
         } else {
-          // Add this message part
+          // Add this message part - allow all different messages for legitimate multi-part responses
           const partTimestamp = Date.now();
           multiPart.messages.push({
             text: botText,
@@ -334,6 +348,10 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           console.log(`📝 Added message part ${multiPart.messages.length} at ${botMessageTimestamp}: "${botText}"`);
           console.log(`📊 Total parts collected so far: ${multiPart.messages.length}`);
+          console.log(`📋 All parts so far:`);
+          multiPart.messages.forEach((msg, idx) => {
+            console.log(`   Part ${idx + 1}: "${msg.text}"`);
+          });
         }
         
         // Clear any existing timeout
@@ -343,6 +361,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
         
         // Set shorter timeout to finalize response (wait 2 seconds for more parts)
         // This prevents bad gateway errors and speeds up responses
+        console.log(`⏰ Setting 2-second timeout for additional parts (current parts: ${multiPart.messages.length})`);
         multiPart.timeoutId = setTimeout(() => {
           const finalizeTimestamp = new Date().toISOString();
           console.log(`⏰ TIMEOUT: Finalizing multi-part response for ${conversationId} at ${finalizeTimestamp}`);
@@ -373,11 +392,13 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Combine all parts into final response in chronological order
           const combinedText = sortedMessages.map(msg => msg.text).join('\n\n');
           
-          // Validate combined text isn't suspiciously long (might indicate message mixing)
-          if (combinedText.length > 1000) {
-            console.log(`⚠️ WARNING: Combined text very long (${combinedText.length} chars) - possible message mixing`);
-            console.log(`   First 200 chars: "${combinedText.substring(0, 200)}..."`);
+          // Validate combined text length and show preview
+          console.log(`📏 Final combined text: ${combinedText.length} characters`);
+          if (combinedText.length > 2000) {
+            console.log(`⚠️ WARNING: Combined text very long (${combinedText.length} chars) - verify this is correct`);
           }
+          console.log(`📖 Combined message preview: "${combinedText.substring(0, 150)}${combinedText.length > 150 ? '...' : ''}"`);
+          console.log(`📖 Full message parts being combined: ${sortedMessages.length} parts`);
           const finalTimestamp = Date.now();
           
           // Store the combined response for frontend polling
