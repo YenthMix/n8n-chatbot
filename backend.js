@@ -281,24 +281,24 @@ app.post('/api/botpress-webhook', async (req, res) => {
             console.log(`   Part ${index + 1}: ${msg.receivedAt} - "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}"`);
           });
           
-          // Combine all parts into final response
-          const combinedText = multiPart.messages.map(msg => msg.text).join('\n\n');
+          // Store individual parts for sequential display (not combined!)
           const finalTimestamp = Date.now();
           
-          // Store the combined response for frontend polling
+          // Store the multi-part response with individual parts for frontend
           botResponses.set(conversationId, {
-            text: combinedText,
+            isMultiPart: true,
+            partCount: multiPart.messages.length,
+            parts: multiPart.messages,
+            currentPartIndex: 0,
             timestamp: finalTimestamp,
             finalizedAt: finalizeTimestamp,
-            id: `bot-combined-${finalTimestamp}`,
-            partCount: multiPart.messages.length,
-            parts: multiPart.messages
+            id: `bot-multipart-${finalTimestamp}`
           });
           
           // Mark as complete and clean up
           multiPart.isComplete = true;
-          console.log(`✅ Multi-part bot response finalized and stored at ${finalizeTimestamp} (${multiPart.messages.length} parts)`);
-          console.log(`📄 Combined text length: ${combinedText.length} characters`);
+          console.log(`✅ Multi-part bot response finalized at ${finalizeTimestamp} - will display ${multiPart.messages.length} separate messages`);
+          console.log(`🎭 Each part will be shown as individual message in chat`);
           
           // Clean up the tracked user message since we got a bot response
           userMessages.delete(conversationId);
@@ -325,11 +325,12 @@ app.post('/api/botpress-webhook', async (req, res) => {
         
       if (!trackedUserMessage || (trackedUserMessage && botText !== trackedUserMessage.text)) {
         if (looksLikeBotResponse && conversationId && botText && !botText.includes('{{ $json')) {
-          console.log(`💾 FALLBACK: STORING BOT RESPONSE: "${botText}"`);
+          console.log(`💾 FALLBACK: STORING SINGLE BOT RESPONSE: "${botText}"`);
           botResponses.set(conversationId, {
             text: botText,
             timestamp: Date.now(),
-            id: `bot-${Date.now()}`
+            id: `bot-fallback-${Date.now()}`,
+            isMultiPart: false
           });
           userMessages.delete(conversationId);
         }
@@ -383,30 +384,67 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     
     if (botResponse) {
       const deliveryTimestamp = new Date().toISOString();
-      console.log(`📤 Sending bot response to frontend at ${deliveryTimestamp}:`);
-      console.log(`   💬 Text: "${botResponse.text.substring(0, 100)}${botResponse.text.length > 100 ? '...' : ''}"`);
-      console.log(`   🔢 Part count: ${botResponse.partCount || 1}`);
-      console.log(`   📏 Total length: ${botResponse.text.length} characters`);
-      if (botResponse.finalizedAt) {
-        console.log(`   ⏱️ Originally finalized at: ${botResponse.finalizedAt}`);
-      }
       
-      // Remove the response after sending it to prevent duplicates
-      botResponses.delete(conversationId);
-      
-      // Clean up multi-part tracking
-      if (multiPart) {
-        if (multiPart.timeoutId) {
-          clearTimeout(multiPart.timeoutId);
+      // Handle multi-part responses (send one part at a time)
+      if (botResponse.isMultiPart) {
+        const currentIndex = botResponse.currentPartIndex;
+        const currentPart = botResponse.parts[currentIndex];
+        
+        console.log(`📤 Sending multi-part response to frontend at ${deliveryTimestamp}:`);
+        console.log(`   🎭 Part ${currentIndex + 1}/${botResponse.partCount}: "${currentPart.text}"`);
+        console.log(`   📏 Part length: ${currentPart.text.length} characters`);
+        
+        // Increment index for next part
+        botResponse.currentPartIndex++;
+        
+        // Check if this is the last part
+        const isLastPart = botResponse.currentPartIndex >= botResponse.partCount;
+        
+        if (isLastPart) {
+          console.log(`🏁 This was the final part (${currentIndex + 1}/${botResponse.partCount})`);
+          // Remove the response after sending the last part
+          botResponses.delete(conversationId);
+          
+          // Clean up multi-part tracking
+          if (multiPart) {
+            if (multiPart.timeoutId) {
+              clearTimeout(multiPart.timeoutId);
+            }
+            multiPartResponses.delete(conversationId);
+            console.log(`🧹 Cleaned up multi-part tracking for conversation: ${conversationId}`);
+          }
+        } else {
+          console.log(`➡️ More parts remaining (${botResponse.partCount - botResponse.currentPartIndex} parts left)`);
         }
-        multiPartResponses.delete(conversationId);
-        console.log(`🧹 Cleaned up multi-part tracking for conversation: ${conversationId}`);
+        
+        res.json({ 
+          success: true, 
+          response: {
+            id: `${currentPart.id}`,
+            text: currentPart.text,
+            timestamp: currentPart.timestamp,
+            receivedAt: currentPart.receivedAt,
+            isMultiPart: true,
+            partNumber: currentIndex + 1,
+            totalParts: botResponse.partCount,
+            isLastPart: isLastPart
+          }
+        });
+        
+      } else {
+        // Handle single-part response (legacy)
+        console.log(`📤 Sending single bot response to frontend at ${deliveryTimestamp}:`);
+        console.log(`   💬 Text: "${botResponse.text.substring(0, 100)}${botResponse.text.length > 100 ? '...' : ''}"`);
+        console.log(`   📏 Total length: ${botResponse.text.length} characters`);
+        
+        // Remove the response after sending it
+        botResponses.delete(conversationId);
+        
+        res.json({ 
+          success: true, 
+          response: botResponse
+        });
       }
-      
-      res.json({ 
-        success: true, 
-        response: botResponse
-      });
     } else {
       // Check if we're still collecting parts
       if (multiPart && !multiPart.isComplete) {
