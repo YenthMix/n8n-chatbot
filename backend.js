@@ -98,6 +98,28 @@ app.post('/api/track-user-message', async (req, res) => {
   // Clear any existing multi-part responses and their timeouts
   if (multiPartResponses.has(conversationId)) {
     const oldMultiPart = multiPartResponses.get(conversationId);
+    
+    // If there was a pending multi-part response, finalize it immediately before starting new cycle
+    if (!oldMultiPart.isComplete && oldMultiPart.messages.length > 0) {
+      console.log(`   🚨 FINALIZING PENDING MULTI-PART RESPONSE (${oldMultiPart.messages.length} parts)`);
+      
+      // Sort and combine the pending messages
+      const sortedMessages = oldMultiPart.messages.sort((a, b) => a.timestamp - b.timestamp);
+      const combinedText = sortedMessages.map(msg => msg.text).join('\n\n');
+      
+      // Store the old response immediately
+      botResponses.set(conversationId, {
+        text: combinedText,
+        timestamp: Date.now(),
+        finalizedAt: new Date().toISOString(),
+        id: `bot-emergency-finalized-${Date.now()}`,
+        partCount: sortedMessages.length,
+        parts: sortedMessages
+      });
+      
+      console.log(`   ✅ Emergency finalized and stored old response: "${combinedText.substring(0, 50)}..."`);
+    }
+    
     if (oldMultiPart.timeoutId) {
       clearTimeout(oldMultiPart.timeoutId);
       console.log(`   ✅ Cleared old timeout`);
@@ -271,10 +293,52 @@ app.post('/api/botpress-webhook', async (req, res) => {
             messages: [],
             lastReceived: Date.now(),
             isComplete: false,
-            timeoutId: null
+            timeoutId: null,
+            userMessageTimestamp: trackedUserMessage ? trackedUserMessage.timestamp : Date.now() // Track which user message this belongs to
           };
           multiPartResponses.set(conversationId, multiPart);
           console.log(`📦 Started new multi-part response collection for conversation: ${conversationId} at ${botMessageTimestamp}`);
+        }
+        
+        // Safety check: If this bot message seems to be from a different user message cycle, finalize the old one first
+        if (trackedUserMessage && multiPart.userMessageTimestamp && 
+            Math.abs(trackedUserMessage.timestamp - multiPart.userMessageTimestamp) > 5000) { // More than 5 seconds apart
+          console.log(`🚨 DETECTED BOT MESSAGE FROM DIFFERENT USER MESSAGE CYCLE!`);
+          console.log(`   Current user message: ${trackedUserMessage.timestamp}, Multi-part started: ${multiPart.userMessageTimestamp}`);
+          console.log(`   Finalizing old multi-part and starting fresh...`);
+          
+          // Finalize the old multi-part immediately
+          if (multiPart.messages.length > 0) {
+            const sortedMessages = multiPart.messages.sort((a, b) => a.timestamp - b.timestamp);
+            const combinedText = sortedMessages.map(msg => msg.text).join('\n\n');
+            
+            botResponses.set(conversationId, {
+              text: combinedText,
+              timestamp: Date.now(),
+              finalizedAt: botMessageTimestamp,
+              id: `bot-cycle-separated-${Date.now()}`,
+              partCount: sortedMessages.length,
+              parts: sortedMessages
+            });
+            
+            console.log(`   ✅ Stored old response from previous cycle: "${combinedText.substring(0, 50)}..."`);
+          }
+          
+          // Clear the old multi-part and start fresh
+          if (multiPart.timeoutId) {
+            clearTimeout(multiPart.timeoutId);
+          }
+          
+          // Start fresh multi-part for the new message
+          multiPart = {
+            messages: [],
+            lastReceived: Date.now(),
+            isComplete: false,
+            timeoutId: null,
+            userMessageTimestamp: trackedUserMessage.timestamp
+          };
+          multiPartResponses.set(conversationId, multiPart);
+          console.log(`📦 Started NEW multi-part collection for current user message cycle`);
         }
         
         // Add this message part
@@ -340,9 +404,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           userMessages.delete(conversationId);
           console.log(`🧹 Cleaned up tracked user message for conversation: ${conversationId}`);
           
-        }, 3000); // Wait 3 seconds for additional parts
+        }, 2000); // Wait 2 seconds for additional parts (reduced for faster conversation flow)
         
-        console.log(`⏱️ Waiting 3 seconds for additional message parts...`);
+        console.log(`⏱️ Waiting 2 seconds for additional message parts...`);
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
