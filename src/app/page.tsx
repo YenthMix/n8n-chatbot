@@ -16,6 +16,7 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isDeliveringParts, setIsDeliveringParts] = useState(false);
 
   useEffect(() => {
     initializeChatAPI();
@@ -162,28 +163,66 @@ export default function Home() {
           if (botData.success && botData.response) {
             const response = botData.response;
             const receivedTimestamp = new Date().toISOString();
-            console.log(`✅ GOT BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
             
-            // Log multi-part info if available
-            if (response.partCount && response.partCount > 1) {
-              console.log(`📝 Multi-part response received at ${receivedTimestamp}: ${response.partCount} parts combined`);
-              console.log(`📏 Total length: ${response.text.length} characters`);
+            if (response.isMultiPart || (response.messages && response.messages.length > 0)) {
+              // Handle multi-part or single-part response as separate bubbles
+              console.log(`✅ GOT BOT RESPONSE at ${receivedTimestamp}: ${response.partCount} separate message(s)`);
+              console.log(`📝 ${response.isMultiPart ? 'Multi-part' : 'Single-part'} response received`);
+              
               if (response.finalizedAt) {
                 console.log(`⏱️ Originally finalized at: ${response.finalizedAt}`);
               }
+              
+              // Start delivering multiple parts
+              setIsDeliveringParts(true);
+              setIsLoading(false); // Stop the main loading, but show delivering state
+              
+              // Add each message part as separate chat bubble with small delays
+              const addMessageWithDelay = (messageData: any, delay: number, isLast: boolean) => {
+                setTimeout(() => {
+                  const botMessage = {
+                    id: messageData.id,
+                    text: messageData.text,
+                    isBot: true,
+                    partIndex: messageData.partIndex,
+                    totalParts: messageData.totalParts,
+                    receivedAt: messageData.receivedAt || receivedTimestamp
+                  };
+                  
+                  setMessages(prev => [...prev, botMessage]);
+                  console.log(`💬 Added chat bubble ${messageData.partIndex}/${messageData.totalParts} at ${receivedTimestamp}: "${messageData.text.substring(0, 50)}${messageData.text.length > 50 ? '...' : ''}"`);
+                  
+                  // If this is the last message, stop the delivering state
+                  if (isLast) {
+                    setIsDeliveringParts(false);
+                    console.log(`🎉 All ${messageData.totalParts} chat bubbles delivered`);
+                  }
+                }, delay);
+              };
+              
+              // Add each message with 500ms delay between them for natural flow
+              response.messages.forEach((msg: any, index: number) => {
+                const isLastMessage = index === response.messages.length - 1;
+                addMessageWithDelay(msg, index * 500, isLastMessage);
+              });
+              
+            } else {
+              // Fallback for old single message format
+              console.log(`✅ GOT BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
+              
+              const botMessage = {
+                id: response.id,
+                text: response.text,
+                isBot: true,
+                partCount: 1,
+                receivedAt: receivedTimestamp
+              };
+              
+              setMessages(prev => [...prev, botMessage]);
+              setIsLoading(false);
+              console.log(`💬 Single bot message added to chat interface at ${receivedTimestamp}`);
             }
             
-            const botMessage = {
-              id: response.id,
-              text: response.text,
-              isBot: true,
-              partCount: response.partCount || 1,
-              receivedAt: receivedTimestamp
-            };
-            
-            setMessages(prev => [...prev, botMessage]);
-            setIsLoading(false);
-            console.log(`💬 Bot message added to chat interface at ${receivedTimestamp} (${response.partCount || 1} parts)`);
             return;
           } else if (botData.message === 'Multi-part response in progress' && botData.partsCollected) {
             const progressTimestamp = botData.timestamp || new Date().toISOString();
@@ -233,7 +272,7 @@ export default function Home() {
   };
 
   const handleSendMessage = async () => {
-    if (inputValue.trim() === '' || isLoading || !isConnected) return;
+    if (inputValue.trim() === '' || isLoading || !isConnected || isDeliveringParts) return;
     
     const userMessage = inputValue.trim();
     setInputValue('');
@@ -256,7 +295,7 @@ export default function Home() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !isLoading) {
+    if (e.key === 'Enter' && !isLoading && !isDeliveringParts) {
       handleSendMessage();
     }
   };
@@ -278,6 +317,16 @@ export default function Home() {
           >
             <div className="message-content">
               {message.text}
+              {(message as any).partIndex && (message as any).totalParts && (message as any).totalParts > 1 && (
+                <div style={{ 
+                  fontSize: '10px', 
+                  opacity: 0.6, 
+                  marginTop: '4px',
+                  fontStyle: 'italic'
+                }}>
+                  Part {(message as any).partIndex}/{(message as any).totalParts}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -290,7 +339,7 @@ export default function Home() {
                 <span></span>
               </div>
               <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
-                Bot is responding... (may be multi-part)
+                Bot is responding... (preparing bubbles)
               </div>
             </div>
           </div>
@@ -308,18 +357,20 @@ export default function Home() {
               ? "Connecting to Botpress..." 
               : isLoading 
                 ? "Bot is typing..." 
-                : "Type your message here..."
+                : isDeliveringParts
+                  ? "Bot is sending multiple messages..."
+                  : "Type your message here..."
           }
           className="message-input"
-          disabled={isLoading || !isConnected}
+          disabled={isLoading || !isConnected || isDeliveringParts}
         />
-        <button 
-          onClick={handleSendMessage} 
-          className={`send-button ${isLoading ? 'loading' : ''}`}
-          disabled={isLoading || !isConnected}
-        >
-          {!isConnected ? 'Connecting...' : isLoading ? '...' : 'Send'}
-        </button>
+                  <button 
+            onClick={handleSendMessage} 
+            className={`send-button ${isLoading || isDeliveringParts ? 'loading' : ''}`}
+            disabled={isLoading || !isConnected || isDeliveringParts}
+          >
+            {!isConnected ? 'Connecting...' : isLoading ? '...' : isDeliveringParts ? 'Delivering...' : 'Send'}
+          </button>
       </div>
     </div>
   );
