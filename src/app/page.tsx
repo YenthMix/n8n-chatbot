@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
 export default function Home() {
   const [messages, setMessages] = useState([
