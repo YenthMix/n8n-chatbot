@@ -35,7 +35,18 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-key']
 }));
 
-app.use(express.json());
+// Add body parser with size limits to prevent bad gateway errors
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Add request timeout middleware
+app.use((req, res, next) => {
+  res.setTimeout(30000, () => {
+    console.log('⚠️ Request timeout for', req.url);
+    res.status(408).json({ error: 'Request timeout' });
+  });
+  next();
+});
 
 // Load secrets from .env file
 const API_ID = process.env.API_ID;
@@ -98,28 +109,6 @@ app.post('/api/track-user-message', async (req, res) => {
   // Clear any existing multi-part responses and their timeouts
   if (multiPartResponses.has(conversationId)) {
     const oldMultiPart = multiPartResponses.get(conversationId);
-    
-    // If there was a pending multi-part response, finalize it immediately before starting new cycle
-    if (!oldMultiPart.isComplete && oldMultiPart.messages.length > 0) {
-      console.log(`   🚨 FINALIZING PENDING MULTI-PART RESPONSE (${oldMultiPart.messages.length} parts)`);
-      
-      // Sort and combine the pending messages
-      const sortedMessages = oldMultiPart.messages.sort((a, b) => a.timestamp - b.timestamp);
-      const combinedText = sortedMessages.map(msg => msg.text).join('\n\n');
-      
-      // Store the old response immediately
-      botResponses.set(conversationId, {
-        text: combinedText,
-        timestamp: Date.now(),
-        finalizedAt: new Date().toISOString(),
-        id: `bot-emergency-finalized-${Date.now()}`,
-        partCount: sortedMessages.length,
-        parts: sortedMessages
-      });
-      
-      console.log(`   ✅ Emergency finalized and stored old response: "${combinedText.substring(0, 50)}..."`);
-    }
-    
     if (oldMultiPart.timeoutId) {
       clearTimeout(oldMultiPart.timeoutId);
       console.log(`   ✅ Cleared old timeout`);
@@ -294,76 +283,77 @@ app.post('/api/botpress-webhook', async (req, res) => {
             lastReceived: Date.now(),
             isComplete: false,
             timeoutId: null,
-            userMessageTimestamp: trackedUserMessage ? trackedUserMessage.timestamp : Date.now() // Track which user message this belongs to
+            startedAt: botMessageTimestamp
           };
           multiPartResponses.set(conversationId, multiPart);
           console.log(`📦 Started new multi-part response collection for conversation: ${conversationId} at ${botMessageTimestamp}`);
-        }
-        
-        // Safety check: If this bot message seems to be from a different user message cycle, finalize the old one first
-        if (trackedUserMessage && multiPart.userMessageTimestamp && 
-            Math.abs(trackedUserMessage.timestamp - multiPart.userMessageTimestamp) > 5000) { // More than 5 seconds apart
-          console.log(`🚨 DETECTED BOT MESSAGE FROM DIFFERENT USER MESSAGE CYCLE!`);
-          console.log(`   Current user message: ${trackedUserMessage.timestamp}, Multi-part started: ${multiPart.userMessageTimestamp}`);
-          console.log(`   Finalizing old multi-part and starting fresh...`);
+        } else {
+          console.log(`⚠️ WARNING: Found existing multi-part response for ${conversationId}`);
+          console.log(`   Started at: ${multiPart.startedAt}`);
+          console.log(`   Current parts: ${multiPart.messages.length}`);
+          console.log(`   This might cause message mixing - clearing and restarting`);
           
-          // Finalize the old multi-part immediately
-          if (multiPart.messages.length > 0) {
-            const sortedMessages = multiPart.messages.sort((a, b) => a.timestamp - b.timestamp);
-            const combinedText = sortedMessages.map(msg => msg.text).join('\n\n');
-            
-            botResponses.set(conversationId, {
-              text: combinedText,
-              timestamp: Date.now(),
-              finalizedAt: botMessageTimestamp,
-              id: `bot-cycle-separated-${Date.now()}`,
-              partCount: sortedMessages.length,
-              parts: sortedMessages
-            });
-            
-            console.log(`   ✅ Stored old response from previous cycle: "${combinedText.substring(0, 50)}..."`);
-          }
-          
-          // Clear the old multi-part and start fresh
+          // Clear old timeout
           if (multiPart.timeoutId) {
             clearTimeout(multiPart.timeoutId);
           }
           
-          // Start fresh multi-part for the new message
+          // Start fresh to prevent message mixing
           multiPart = {
             messages: [],
             lastReceived: Date.now(),
             isComplete: false,
             timeoutId: null,
-            userMessageTimestamp: trackedUserMessage.timestamp
+            startedAt: botMessageTimestamp
           };
           multiPartResponses.set(conversationId, multiPart);
-          console.log(`📦 Started NEW multi-part collection for current user message cycle`);
+          console.log(`🔄 Restarted multi-part response collection to prevent mixing`);
         }
         
-        // Add this message part
-        const partTimestamp = Date.now();
-        multiPart.messages.push({
-          text: botText,
-          timestamp: partTimestamp,
-          receivedAt: botMessageTimestamp,
-          id: `bot-part-${partTimestamp}-${multiPart.messages.length}`
-        });
-        multiPart.lastReceived = partTimestamp;
+        // Check if this message part is a duplicate or very similar to existing parts
+        const isDuplicate = multiPart.messages.some(existingMsg => 
+          existingMsg.text === botText || 
+          existingMsg.text.includes(botText) || 
+          botText.includes(existingMsg.text)
+        );
         
-        console.log(`📝 Added message part ${multiPart.messages.length} at ${botMessageTimestamp}: "${botText}"`);
-        console.log(`📊 Total parts collected so far: ${multiPart.messages.length}`);
+        if (isDuplicate) {
+          console.log(`⚠️ DUPLICATE/SIMILAR MESSAGE DETECTED: "${botText}"`);
+          console.log(`   Skipping to prevent message mixing`);
+          // Don't add duplicate parts, just reset timeout
+        } else {
+          // Add this message part
+          const partTimestamp = Date.now();
+          multiPart.messages.push({
+            text: botText,
+            timestamp: partTimestamp,
+            receivedAt: botMessageTimestamp,
+            id: `bot-part-${partTimestamp}-${multiPart.messages.length}`
+          });
+          multiPart.lastReceived = partTimestamp;
+          
+          console.log(`📝 Added message part ${multiPart.messages.length} at ${botMessageTimestamp}: "${botText}"`);
+          console.log(`📊 Total parts collected so far: ${multiPart.messages.length}`);
+        }
         
         // Clear any existing timeout
         if (multiPart.timeoutId) {
           clearTimeout(multiPart.timeoutId);
         }
         
-        // Set timeout to finalize response (wait 3 seconds for more parts)
+        // Set shorter timeout to finalize response (wait 2 seconds for more parts)
+        // This prevents bad gateway errors and speeds up responses
         multiPart.timeoutId = setTimeout(() => {
           const finalizeTimestamp = new Date().toISOString();
           console.log(`⏰ TIMEOUT: Finalizing multi-part response for ${conversationId} at ${finalizeTimestamp}`);
           console.log(`🎯 Final message count: ${multiPart.messages.length} parts`);
+          
+          // Check if we have any messages to process
+          if (multiPart.messages.length === 0) {
+            console.log(`⚠️ WARNING: No messages to finalize for ${conversationId}`);
+            multiPart.isComplete = true;
+            return;
+          }
           
           // Sort messages by timestamp to ensure correct order (first received = first in message)
           const sortedMessages = multiPart.messages.sort((a, b) => a.timestamp - b.timestamp);
@@ -382,6 +372,12 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           // Combine all parts into final response in chronological order
           const combinedText = sortedMessages.map(msg => msg.text).join('\n\n');
+          
+          // Validate combined text isn't suspiciously long (might indicate message mixing)
+          if (combinedText.length > 1000) {
+            console.log(`⚠️ WARNING: Combined text very long (${combinedText.length} chars) - possible message mixing`);
+            console.log(`   First 200 chars: "${combinedText.substring(0, 200)}..."`);
+          }
           const finalTimestamp = Date.now();
           
           // Store the combined response for frontend polling
@@ -404,7 +400,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
           userMessages.delete(conversationId);
           console.log(`🧹 Cleaned up tracked user message for conversation: ${conversationId}`);
           
-        }, 2000); // Wait 2 seconds for additional parts (reduced for faster conversation flow)
+        }, 2000); // Wait 2 seconds for additional parts
         
         console.log(`⏱️ Waiting 2 seconds for additional message parts...`);
       }
@@ -547,6 +543,19 @@ app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
 });
 
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: Date.now(),
+    activeConversations: {
+      botResponses: botResponses.size,
+      userMessages: userMessages.size,
+      multiPartResponses: multiPartResponses.size
+    }
+  });
+});
+
 // Debug endpoint to clear all state (for testing)
 app.post('/api/debug/clear-all', async (req, res) => {
   console.log('🧹 FORCE CLEARING ALL STATE');
@@ -623,6 +632,21 @@ app.get('/api/debug/stored-responses', async (req, res) => {
   });
 });
 
-const PORT = process.env.PORT;
+// Global error handler to prevent bad gateway errors
+app.use((err, req, res, next) => {
+  console.error('❌ GLOBAL ERROR HANDLER:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ 
+      error: 'Server error', 
+      message: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`🔧 Debug endpoint: http://localhost:${PORT}/api/debug/stored-responses`);
 }); 
