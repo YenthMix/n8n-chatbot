@@ -39,11 +39,14 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Add request timeout middleware
+// Add request timeout middleware with shorter timeout for webhooks
 app.use((req, res, next) => {
-  res.setTimeout(30000, () => {
-    console.log('⚠️ Request timeout for', req.url);
-    res.status(408).json({ error: 'Request timeout' });
+  const timeout = req.url.includes('/webhook') ? 5000 : 30000; // 5s for webhooks, 30s for others
+  res.setTimeout(timeout, () => {
+    console.log(`⚠️ Request timeout (${timeout}ms) for`, req.url);
+    if (!res.headersSent) {
+      res.status(408).json({ error: 'Request timeout' });
+    }
   });
   next();
 });
@@ -62,6 +65,9 @@ const userMessages = new Map();
 
 // Track multi-part bot responses
 const multiPartResponses = new Map(); // conversationId -> { messages: [], lastReceived: timestamp, isComplete: boolean }
+
+// Track webhook processing to prevent race conditions
+const webhookQueue = new Map(); // conversationId -> processing status
 
 app.post('/api/user', async (req, res) => {
   try {
@@ -215,16 +221,29 @@ app.get('/api/messages', async (req, res) => {
 });
 
 app.post('/api/botpress-webhook', async (req, res) => {
-  try {
-    const timestamp = new Date().toISOString();
-    console.log(`🔄 WEBHOOK RECEIVED FROM N8N at ${timestamp}:`);
-    console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
-    
-    // Show current state before processing
-    console.log(`📊 CURRENT STATE BEFORE PROCESSING:`);
-    console.log(`   Bot responses stored: ${botResponses.size}`);
-    console.log(`   User messages tracked: ${userMessages.size}`);
-    console.log(`   Multi-part responses: ${multiPartResponses.size}`);
+  // Immediately respond to prevent timeout/bad gateway
+  const timestamp = new Date().toISOString();
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  // Send immediate response to N8N to prevent bad gateway
+  res.status(200).json({ 
+    success: true,
+    requestId: requestId,
+    timestamp: timestamp,
+    message: 'Webhook received and processing'
+  });
+  
+  // Process webhook asynchronously to prevent blocking
+  setImmediate(async () => {
+    try {
+      console.log(`🔄 WEBHOOK RECEIVED FROM N8N at ${timestamp} (ID: ${requestId}):`);
+      console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
+      
+      // Show current state before processing
+      console.log(`📊 CURRENT STATE BEFORE PROCESSING:`);
+      console.log(`   Bot responses stored: ${botResponses.size}`);
+      console.log(`   User messages tracked: ${userMessages.size}`);
+      console.log(`   Multi-part responses: ${multiPartResponses.size}`);
     
     const body = req.body;
     let conversationId, botText, isBot;
@@ -274,6 +293,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
       
       if (conversationId && botText && !botText.includes('{{ $json')) {
         console.log(`💾 COLLECTING BOT RESPONSE PART at ${botMessageTimestamp}: "${botText}"`);
+        
+        // Mark this conversation as being processed to prevent race conditions
+        webhookQueue.set(conversationId, { processing: true, lastUpdate: Date.now() });
         
         // Get or create multi-part response tracking
         let multiPart = multiPartResponses.get(conversationId);
@@ -359,9 +381,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           clearTimeout(multiPart.timeoutId);
         }
         
-        // Set shorter timeout to finalize response (wait 2 seconds for more parts)
+        // Set short timeout to finalize response (wait 1.5 seconds for more parts)
         // This prevents bad gateway errors and speeds up responses
-        console.log(`⏰ Setting 2-second timeout for additional parts (current parts: ${multiPart.messages.length})`);
+        console.log(`⏰ Setting 1.5-second timeout for additional parts (current parts: ${multiPart.messages.length})`);
         multiPart.timeoutId = setTimeout(() => {
           const finalizeTimestamp = new Date().toISOString();
           console.log(`⏰ TIMEOUT: Finalizing multi-part response for ${conversationId} at ${finalizeTimestamp}`);
@@ -421,9 +443,13 @@ app.post('/api/botpress-webhook', async (req, res) => {
           userMessages.delete(conversationId);
           console.log(`🧹 Cleaned up tracked user message for conversation: ${conversationId}`);
           
-        }, 2000); // Wait 2 seconds for additional parts
+          // Mark webhook processing as complete
+          webhookQueue.delete(conversationId);
+          console.log(`🧹 Cleared webhook processing queue for conversation: ${conversationId}`);
+          
+        }, 1500); // Wait 1.5 seconds for additional parts
         
-        console.log(`⏱️ Waiting 2 seconds for additional message parts...`);
+        console.log(`⏱️ Waiting 1.5 seconds for additional message parts...`);
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
@@ -454,42 +480,41 @@ app.post('/api/botpress-webhook', async (req, res) => {
       }
     }
     
-    // Clean up old responses and user messages (older than 5 minutes)
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    for (const [key, value] of botResponses.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        botResponses.delete(key);
-      }
-    }
-    for (const [key, value] of userMessages.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        userMessages.delete(key);
-      }
-    }
-    for (const [key, value] of multiPartResponses.entries()) {
-      if (value.lastReceived < fiveMinutesAgo) {
-        if (value.timeoutId) {
-          clearTimeout(value.timeoutId);
+      // Clean up old responses and user messages (older than 5 minutes)
+      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      for (const [key, value] of botResponses.entries()) {
+        if (value.timestamp < fiveMinutesAgo) {
+          botResponses.delete(key);
         }
-        multiPartResponses.delete(key);
-        console.log(`🧹 Cleaned up old multi-part response for conversation: ${key}`);
       }
+      for (const [key, value] of userMessages.entries()) {
+        if (value.timestamp < fiveMinutesAgo) {
+          userMessages.delete(key);
+        }
+      }
+      for (const [key, value] of multiPartResponses.entries()) {
+        if (value.lastReceived < fiveMinutesAgo) {
+          if (value.timeoutId) {
+            clearTimeout(value.timeoutId);
+          }
+          multiPartResponses.delete(key);
+          console.log(`🧹 Cleaned up old multi-part response for conversation: ${key}`);
+        }
+      }
+      for (const [key, value] of webhookQueue.entries()) {
+        if (value.lastUpdate < fiveMinutesAgo) {
+          webhookQueue.delete(key);
+          console.log(`🧹 Cleaned up old webhook queue entry for conversation: ${key}`);
+        }
+      }
+      
+      console.log(`✅ Webhook processing completed for request ${requestId}`);
+      
+    } catch (error) {
+      console.error(`❌ WEBHOOK ERROR for request ${requestId}:`, error);
+      // Note: We already sent response to N8N, so just log the error
     }
-    
-    res.json({ 
-      success: true,
-      conversationId: conversationId,
-      message: botText,
-      isBot: isBot,
-      received: true
-    });
-  } catch (error) {
-    console.error('❌ WEBHOOK ERROR:', error);
-    res.status(500).json({ 
-      error: 'Webhook processing failed',
-      success: false 
-    });
-  }
+  });
 });
 
 // New endpoint for frontend to get bot responses
@@ -598,6 +623,7 @@ app.post('/api/debug/clear-all', async (req, res) => {
   botResponses.clear();
   userMessages.clear();
   multiPartResponses.clear();
+  webhookQueue.clear();
   
   console.log(`✅ Cleared all state. Before: ${JSON.stringify(beforeCounts)}, After: all 0`);
   
@@ -641,14 +667,17 @@ app.get('/api/debug/stored-responses', async (req, res) => {
   console.log(`   Bot responses: ${botResponses.size} stored`);
   console.log(`   User messages: ${userMessages.size} tracked`);
   console.log(`   Multi-part responses: ${multiPartResponses.size} in progress`);
+  console.log(`   Webhook queue: ${webhookQueue.size} processing`);
   
   res.json({ 
     totalBotResponses: botResponses.size,
     totalUserMessages: userMessages.size,
     totalMultiPartResponses: multiPartResponses.size,
+    totalWebhookQueue: webhookQueue.size,
     botResponses: allResponses,
     userMessages: allUserMessages,
     multiPartResponses: allMultiPartResponses,
+    webhookQueue: Object.fromEntries(webhookQueue),
     timestamp: Date.now()
   });
 });
