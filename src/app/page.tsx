@@ -21,6 +21,22 @@ export default function Home() {
     console.log(`🔧 FRONTEND CONFIG CHECK:`);
     console.log(`   N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}`);
     console.log(`   BACKEND_URL: ${BACKEND_URL}`);
+    console.log(`   Window location: ${window.location.href}`);
+    console.log(`   Environment: ${process.env.NODE_ENV}`);
+    
+    // Test backend connectivity immediately
+    fetch(`${BACKEND_URL}/api/debug/stored-responses`)
+      .then(res => {
+        console.log(`✅ BACKEND CONNECTIVITY TEST: Status ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        console.log(`✅ BACKEND RESPONSE:`, data);
+      })
+      .catch(err => {
+        console.error(`❌ BACKEND CONNECTIVITY FAILED:`, err);
+        console.error(`❌ Cannot reach backend at: ${BACKEND_URL}`);
+      });
     
     initializeChatAPI();
   }, []);
@@ -28,6 +44,9 @@ export default function Home() {
   // Removed old polling mechanism - now using direct bot response endpoint
 
   const initializeChatAPI = async () => {
+    console.log(`🔄 STARTING CHAT API INITIALIZATION...`);
+    console.log(`🔄 Attempting to create user at: ${BACKEND_URL}/api/user`);
+    
     try {
       const userResponse = await fetch(`${BACKEND_URL}/api/user`, {
         method: 'POST',
@@ -36,7 +55,11 @@ export default function Home() {
         }
       });
       
+      console.log(`📡 User creation response status: ${userResponse.status}`);
+      
       if (!userResponse.ok) {
+        const errorText = await userResponse.text();
+        console.error(`❌ User creation failed with status ${userResponse.status}: ${errorText}`);
         throw new Error(`User creation failed: ${userResponse.status}`);
       }
       

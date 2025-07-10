@@ -496,6 +496,34 @@ app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
 });
 
+// Simple health check endpoint for debugging
+app.get('/api/health', async (req, res) => {
+  const timestamp = new Date().toISOString();
+  console.log(`🩺 HEALTH CHECK REQUEST at ${timestamp} from ${req.ip}`);
+  
+  res.json({ 
+    status: 'healthy', 
+    timestamp: timestamp,
+    port: PORT,
+    message: 'Backend is running and accessible',
+    botResponsesCount: botResponses.size,
+    multiPartResponsesCount: multiPartResponses.size
+  });
+});
+
+// Simple CORS test endpoint
+app.get('/api/test', async (req, res) => {
+  const timestamp = new Date().toISOString();
+  console.log(`🧪 TEST ENDPOINT REQUEST at ${timestamp} from ${req.ip}`);
+  
+  res.json({ 
+    success: true,
+    message: 'Frontend can reach backend successfully!',
+    timestamp: timestamp,
+    headers: req.headers
+  });
+});
+
 // Simple test endpoint to verify bot response format
 app.get('/api/test/bot-message/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
