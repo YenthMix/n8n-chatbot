@@ -86,6 +86,26 @@ app.post('/api/track-user-message', async (req, res) => {
     return res.status(400).json({ error: 'Missing conversationId or text' });
   }
   
+  // Clean up any previous state for this conversation before tracking new message
+  console.log(`🧹 CLEANING UP PREVIOUS STATE for conversation ${conversationId}`);
+  
+  // Clear any existing bot responses
+  if (botResponses.has(conversationId)) {
+    botResponses.delete(conversationId);
+    console.log(`   ✅ Removed old bot response`);
+  }
+  
+  // Clear any existing multi-part responses and their timeouts
+  if (multiPartResponses.has(conversationId)) {
+    const oldMultiPart = multiPartResponses.get(conversationId);
+    if (oldMultiPart.timeoutId) {
+      clearTimeout(oldMultiPart.timeoutId);
+      console.log(`   ✅ Cleared old timeout`);
+    }
+    multiPartResponses.delete(conversationId);
+    console.log(`   ✅ Removed old multi-part response`);
+  }
+  
   // Store user message with timestamp to track what the user actually sent
   userMessages.set(conversationId, {
     text: text,
@@ -95,7 +115,7 @@ app.post('/api/track-user-message', async (req, res) => {
   
   console.log(`✅ USER MESSAGE TRACKED SUCCESSFULLY at ${userTrackingTimestamp}. Total tracked: ${userMessages.size}`);
   console.log(`   Stored: "${text}" for conversation ${conversationId}`);
-  console.log(`   This will help identify if N8N echoes this message back`);
+  console.log(`   State cleaned and ready for new message cycle`);
   
   res.json({ success: true });
 });
@@ -188,6 +208,12 @@ app.post('/api/botpress-webhook', async (req, res) => {
     const timestamp = new Date().toISOString();
     console.log(`🔄 WEBHOOK RECEIVED FROM N8N at ${timestamp}:`);
     console.log('📋 Full request body:', JSON.stringify(req.body, null, 2));
+    
+    // Show current state before processing
+    console.log(`📊 CURRENT STATE BEFORE PROCESSING:`);
+    console.log(`   Bot responses stored: ${botResponses.size}`);
+    console.log(`   User messages tracked: ${userMessages.size}`);
+    console.log(`   Multi-part responses: ${multiPartResponses.size}`);
     
     const body = req.body;
     let conversationId, botText, isBot;
@@ -308,9 +334,11 @@ app.post('/api/botpress-webhook', async (req, res) => {
           multiPart.isComplete = true;
           console.log(`✅ Multi-part bot response finalized and stored at ${finalizeTimestamp} (${sortedMessages.length} parts)`);
           console.log(`📄 Combined text length: ${combinedText.length} characters`);
+          console.log(`📦 Final bot response ready for frontend polling`);
           
           // Clean up the tracked user message since we got a bot response
           userMessages.delete(conversationId);
+          console.log(`🧹 Cleaned up tracked user message for conversation: ${conversationId}`);
           
         }, 3000); // Wait 3 seconds for additional parts
         
@@ -407,10 +435,19 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       if (multiPart) {
         if (multiPart.timeoutId) {
           clearTimeout(multiPart.timeoutId);
+          console.log(`🧹 Cleared timeout for conversation: ${conversationId}`);
         }
         multiPartResponses.delete(conversationId);
         console.log(`🧹 Cleaned up multi-part tracking for conversation: ${conversationId}`);
       }
+      
+      // Show final state after cleanup
+      console.log(`📊 STATE AFTER CLEANUP:`);
+      console.log(`   Bot responses stored: ${botResponses.size}`);
+      console.log(`   User messages tracked: ${userMessages.size}`);
+      console.log(`   Multi-part responses: ${multiPartResponses.size}`);
+      console.log(`🏁 Ready for next message cycle`);
+    
       
       res.json({ 
         success: true, 
@@ -428,6 +465,8 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
           timestamp: collectingTimestamp
         });
       } else {
+        console.log(`❌ NO BOT RESPONSE FOUND for conversation: ${conversationId}`);
+        console.log(`📊 Current state: ${botResponses.size} bot responses, ${multiPartResponses.size} multi-part in progress`);
         res.json({ 
           success: false, 
           message: 'No bot response available' 
@@ -442,6 +481,38 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
 
 app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
+});
+
+// Debug endpoint to clear all state (for testing)
+app.post('/api/debug/clear-all', async (req, res) => {
+  console.log('🧹 FORCE CLEARING ALL STATE');
+  
+  // Clear all timeouts first
+  for (const [key, value] of multiPartResponses.entries()) {
+    if (value.timeoutId) {
+      clearTimeout(value.timeoutId);
+    }
+  }
+  
+  const beforeCounts = {
+    botResponses: botResponses.size,
+    userMessages: userMessages.size,
+    multiPartResponses: multiPartResponses.size
+  };
+  
+  // Clear all maps
+  botResponses.clear();
+  userMessages.clear();
+  multiPartResponses.clear();
+  
+  console.log(`✅ Cleared all state. Before: ${JSON.stringify(beforeCounts)}, After: all 0`);
+  
+  res.json({ 
+    success: true,
+    message: 'All state cleared',
+    clearedCounts: beforeCounts,
+    timestamp: Date.now()
+  });
 });
 
 // Debug endpoint to see what's stored
