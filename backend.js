@@ -445,20 +445,17 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       return;
     }
     
-    // Check if n8n is still sending messages
+    // Simple check: wait 7 seconds after last webhook
     if (lastActivity) {
       const timeSinceLastWebhook = Date.now() - lastActivity;
-      const isStillActive = timeSinceLastWebhook < 10000; // Reduced to 10 seconds but add message count check
+      const shouldWait = timeSinceLastWebhook < 7000; // Simple 7 second wait
       
-      console.log(`🔍 WEBHOOK CHECK: ${timeSinceLastWebhook}ms since last webhook for ${conversationId}`);
+      console.log(`🔍 SIMPLE CHECK: ${timeSinceLastWebhook}ms since last webhook for ${conversationId}`);
       console.log(`🔍 Current message count: ${conversationData.messages.length}`);
-      console.log(`🔍 Is still active? ${isStillActive} (threshold: 10000ms)`);
+      console.log(`🔍 Should wait? ${shouldWait} (threshold: 7000ms)`);
       
-      // If we have messages but last activity was very recent (< 5 seconds), always wait
-      const veryRecentActivity = timeSinceLastWebhook < 5000;
-      
-      if (isStillActive || veryRecentActivity) {
-        console.log(`⏳ HOLDING BACK DELIVERY - ${veryRecentActivity ? 'Very recent activity' : 'Still within threshold'} (${timeSinceLastWebhook}ms ago). Current count: ${conversationData.messages.length}`);
+      if (shouldWait) {
+        console.log(`⏳ WAITING - Only ${timeSinceLastWebhook}ms since last webhook. Current count: ${conversationData.messages.length}`);
         res.json({ 
           success: false, 
           message: 'Still collecting messages from n8n',
@@ -467,8 +464,6 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
         });
         return;
       }
-    } else {
-      console.log(`🔍 NO WEBHOOK ACTIVITY TRACKED for ${conversationId} - will deliver what we have`);
     }
     
     // n8n appears to be done, deliver ALL messages at once
@@ -476,14 +471,17 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       .filter(msg => !msg.delivered)
       .sort((a, b) => a.timestamp - b.timestamp);
     
+    console.log(`🚀 DECISION TIME: Delivering ${allMessages.length} messages for ${conversationId}`);
+    console.log(`🚀 Total messages in conversation: ${conversationData.messages.length}`);
+    console.log(`🚀 Last webhook activity: ${lastActivity ? new Date(lastActivity).toISOString() : 'None'}`);
+    
     if (allMessages.length > 0) {
       const deliveryTimestamp = new Date().toISOString();
-      console.log(`📤 N8N APPEARS DONE - Delivering ALL ${allMessages.length} messages at once at ${deliveryTimestamp}:`);
-      console.log(`📤 Total messages collected: ${conversationData.messages.length}`);
+      console.log(`📤 🎯 DELIVERING ALL ${allMessages.length} MESSAGES NOW at ${deliveryTimestamp}:`);
       
       // Log each message being delivered
       allMessages.forEach((msg, idx) => {
-        console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}" (${msg.receivedAt})`);
+        console.log(`   📨 Message ${idx + 1}: "${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}" (${msg.receivedAt})`);
       });
       
       // Mark ALL messages as delivered
@@ -491,12 +489,13 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
         msg.delivered = true;
       });
       
-      console.log(`✅ ALL MESSAGES DELIVERED FOR ${conversationId}`);
+      console.log(`✅ 🎉 ALL ${allMessages.length} MESSAGES DELIVERED FOR ${conversationId}`);
     
       res.json({ 
         success: true, 
         messages: allMessages,
-        totalCollected: conversationData.messages.length
+        totalCollected: conversationData.messages.length,
+        deliveredAt: deliveryTimestamp
       });
     } else {
       console.log(`❌ NO UNDELIVERED MESSAGES for conversation: ${conversationId}`);

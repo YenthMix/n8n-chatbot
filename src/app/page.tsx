@@ -145,7 +145,7 @@ export default function Home() {
       return;
     }
 
-    const maxAttempts = 30;
+    const maxAttempts = 40;
     let attempts = 0;
 
     const poll = async () => {
@@ -161,11 +161,13 @@ export default function Home() {
           
           if (botData.success && botData.messages) {
             const receivedTimestamp = new Date().toISOString();
-            console.log(`✅ GOT ALL ${botData.messages.length} BOT MESSAGES at ${receivedTimestamp} - n8n is done!`);
+            console.log(`🎉 FRONTEND: GOT ALL ${botData.messages.length} BOT MESSAGES at ${receivedTimestamp} - n8n is done!`);
+            console.log(`🎉 FRONTEND: Backend delivered at: ${botData.deliveredAt || 'unknown'}`);
+            console.log(`🎉 FRONTEND: Total collected by backend: ${botData.totalCollected || 'unknown'}`);
             
             // Log each message received
             botData.messages.forEach((msg: any, idx: number) => {
-              console.log(`   Message ${idx + 1}: "${msg.text}" (received: ${msg.receivedAt})`);
+              console.log(`   📨 Frontend received message ${idx + 1}: "${msg.text}" (backend received: ${msg.receivedAt})`);
             });
             
             // Add ALL messages at once to the chat in timestamp order
@@ -177,9 +179,14 @@ export default function Home() {
               timestamp: msg.timestamp
             }));
             
-            setMessages(prev => [...prev, ...botMessages]);
+            console.log(`🎯 FRONTEND: About to add ${botMessages.length} messages to UI`);
+            setMessages(prev => {
+              const newMessages = [...prev, ...botMessages];
+              console.log(`🎯 FRONTEND: UI now has ${newMessages.length} total messages`);
+              return newMessages;
+            });
             setIsLoading(false);
-            console.log(`💬 ALL ${botMessages.length} bot messages delivered at once to chat interface at ${receivedTimestamp}`);
+            console.log(`💬 🏁 FRONTEND: ALL ${botMessages.length} bot messages delivered to UI at ${receivedTimestamp}`);
             return;
           } else if (botData.message === 'Still collecting messages from n8n') {
             console.log(`📦 Still collecting from n8n... (${botData.messageCount || 0} messages so far, ${botData.timeSinceLastWebhook}ms since last)`);
