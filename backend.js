@@ -233,6 +233,14 @@ app.post('/api/botpress-webhook', async (req, res) => {
       console.log(`📊 CURRENT STATE BEFORE PROCESSING:`);
       console.log(`   Bot messages stored: ${botMessages.size}`);
       console.log(`   User messages tracked: ${userMessages.size}`);
+      
+      // Debug: Show all stored conversations
+      if (botMessages.size > 0) {
+        console.log(`🔍 DEBUG: All stored conversations:`);
+        for (const [convId, convData] of botMessages.entries()) {
+          console.log(`   📝 ${convId}: ${convData.messages.length} messages, allReceived: ${convData.allMessagesReceived}`);
+        }
+      }
     
     const body = req.body;
     let conversationId, botText, isBot;
@@ -283,7 +291,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
       if (conversationId && botText && !botText.includes('{{ $json')) {
         console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${botText}"`);
         
-        // Get or create conversation data
+        // Get or create conversation data - IMPORTANT: Use atomic operation to prevent race conditions
         let conversationData = botMessages.get(conversationId);
         if (!conversationData) {
           conversationData = {
@@ -294,6 +302,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
           };
           botMessages.set(conversationId, conversationData);
           console.log(`📦 Created new conversation data for: ${conversationId}`);
+        } else {
+          console.log(`📦 Using existing conversation data for: ${conversationId} (${conversationData.messages.length} existing messages)`);
         }
         
         // Check for exact duplicates to avoid storing the same message twice
@@ -327,10 +337,11 @@ app.post('/api/botpress-webhook', async (req, res) => {
             console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt}) [delivered: ${msg.delivered}]`);
           });
           
-          // Clear any existing timeout for this conversation
+          // Clear any existing timeout for this conversation BEFORE adding new message
           if (conversationData.deliveryTimeoutId) {
             clearTimeout(conversationData.deliveryTimeoutId);
             console.log(`🧹 Cleared previous delivery timeout for conversation: ${conversationId}`);
+            conversationData.deliveryTimeoutId = null;
           }
           
           // Set timeout to deliver all messages after n8n stops sending (wait 3 seconds after last message)
