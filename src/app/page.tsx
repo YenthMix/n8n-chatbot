@@ -1,28 +1,17 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-// Message interface
-interface Message {
-  id: string;
-  text: string;
-  isBot: boolean;
-  partCount?: number;
-  receivedAt?: string;
-}
-
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isMultiPart, setIsMultiPart] = useState(false);
-  const [partsCollected, setPartsCollected] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userKey, setUserKey] = useState<string | null>(null);
@@ -82,8 +71,7 @@ export default function Home() {
       const errorMessage = {
         id: `error-${Date.now()}`,
         text: "Failed to connect to Botpress. Please make sure the backend server is running with 'npm run backend'.",
-        isBot: true,
-        receivedAt: new Date().toISOString()
+        isBot: true
       };
       setMessages(prev => [...prev, errorMessage]);
     }
@@ -171,43 +159,30 @@ export default function Home() {
           const botData = await botResponseRes.json();
           console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
           
-          if (botData.success && botData.response) {
-            const response = botData.response;
+          if (botData.success && botData.messages) {
             const receivedTimestamp = new Date().toISOString();
-            console.log(`✅ GOT BOT RESPONSE at ${receivedTimestamp}: "${response.text}"`);
+            console.log(`✅ GOT ${botData.messages.length} BOT MESSAGES at ${receivedTimestamp}`);
             
-            // Log multi-part info if available
-            if (response.partCount && response.partCount > 1) {
-              console.log(`📝 Multi-part response received at ${receivedTimestamp}: ${response.partCount} parts combined`);
-              console.log(`📏 Total length: ${response.text.length} characters`);
-              if (response.finalizedAt) {
-                console.log(`⏱️ Originally finalized at: ${response.finalizedAt}`);
-              }
-            }
+            // Log each message received
+            botData.messages.forEach((msg: any, idx: number) => {
+              console.log(`   Message ${idx + 1}: "${msg.text}" (received: ${msg.receivedAt})`);
+            });
             
-            const botMessage = {
-              id: response.id,
-              text: response.text,
+            // Add each message separately to the chat in timestamp order
+            const botMessages = botData.messages.map((msg: any) => ({
+              id: msg.id,
+              text: msg.text,
               isBot: true,
-              partCount: response.partCount || 1,
-              receivedAt: receivedTimestamp
-            };
+              receivedAt: msg.receivedAt,
+              timestamp: msg.timestamp
+            }));
             
-            setMessages(prev => [...prev, botMessage]);
+            setMessages(prev => [...prev, ...botMessages]);
             setIsLoading(false);
-            setIsMultiPart(false);
-            setPartsCollected(0);
-            console.log(`💬 Bot message added to chat interface at ${receivedTimestamp} (${response.partCount || 1} parts)`);
+            console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
             return;
-          } else if (botData.message === 'Multi-part response in progress' && botData.partsCollected) {
-            const progressTimestamp = botData.timestamp || new Date().toISOString();
-            console.log(`📦 Multi-part response in progress at ${progressTimestamp}: ${botData.partsCollected} parts collected so far...`);
-            // Update multi-part status and keep typing indicator active
-            setIsMultiPart(true);
-            setPartsCollected(botData.partsCollected);
-            // Note: isLoading stays true to keep the typing indicator showing
           } else {
-            console.log(`⏳ No bot response available yet at ${new Date().toISOString()}, continuing to poll...`);
+            console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
@@ -221,13 +196,10 @@ export default function Home() {
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
             text: "I'm taking longer than usual to respond. Please try sending your message again.",
-            isBot: true,
-            receivedAt: new Date().toISOString()
+            isBot: true
           };
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
-          setIsMultiPart(false);
-          setPartsCollected(0);
         }
         
       } catch (error) {
@@ -237,13 +209,10 @@ export default function Home() {
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
             text: "I'm having trouble connecting right now. Please try again.",
-            isBot: true,
-            receivedAt: new Date().toISOString()
+            isBot: true
           };
           setMessages(prev => [...prev, errorMessage]);
           setIsLoading(false);
-          setIsMultiPart(false);
-          setPartsCollected(0);
         } else {
           setTimeout(poll, 1000);
         }
@@ -261,8 +230,6 @@ export default function Home() {
     const userMessage = inputValue.trim();
     setInputValue('');
     setIsLoading(true);
-    setIsMultiPart(false);
-    setPartsCollected(0);
     
     const userMessageObj = { id: `user-${Date.now()}`, text: userMessage, isBot: false };
     setMessages(prev => [...prev, userMessageObj]);
@@ -273,13 +240,10 @@ export default function Home() {
       const errorMessage = { 
         id: `error-${Date.now()}`, 
         text: "Sorry, I'm having trouble connecting to the bot right now. Please try again later.", 
-        isBot: true,
-        receivedAt: new Date().toISOString()
+        isBot: true 
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
-      setIsMultiPart(false);
-      setPartsCollected(0);
     }
   };
 
@@ -306,16 +270,6 @@ export default function Home() {
           >
             <div className="message-content">
               {message.text}
-              {message.isBot && message.receivedAt && (
-                <div className="message-timestamp">
-                  {new Date(message.receivedAt).toLocaleTimeString('en-US', {
-                    hour12: false,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                  })}
-                </div>
-              )}
             </div>
           </div>
         ))}
@@ -328,10 +282,7 @@ export default function Home() {
                 <span></span>
               </div>
               <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
-                {isMultiPart 
-                  ? `Collecting response parts... (${partsCollected} received)`
-                  : "Bot is responding... (may be multi-part)"
-                }
+                Bot is responding...
               </div>
             </div>
           </div>

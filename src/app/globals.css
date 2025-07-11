@@ -107,19 +107,6 @@ body {
   border-bottom-right-radius: 4px;
 }
 
-.message-timestamp {
-  font-size: 11px;
-  color: #666;
-  margin-top: 4px;
-  text-align: right;
-  opacity: 0.7;
-  font-family: monospace;
-}
-
-.bot-message .message-timestamp {
-  color: #888;
-}
-
 /* Typing indicator */
 .typing-indicator {
   display: flex;
