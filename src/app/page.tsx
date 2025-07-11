@@ -19,24 +19,35 @@ export default function Home() {
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Ref for auto-scrolling to the bottom of messages
+  // Ref for the messages container to enable auto-scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll function
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'end'
-      });
-    }
-  };
-
-  // Scroll to bottom whenever messages change
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading]);
+    const scrollToBottom = () => {
+      // Method 1: Scroll the messages end element into view
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'end'
+        });
+      }
+      
+      // Method 2: Also set scrollTop as fallback
+      if (messagesContainerRef.current) {
+        const container = messagesContainerRef.current;
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    // Use a small delay to ensure the DOM has been updated
+    const timer = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timer);
+  }, [messages, isLoading]); // Trigger on messages change and loading state change
 
   useEffect(() => {
     initializeChatAPI();
@@ -332,6 +343,7 @@ export default function Home() {
             </div>
           </div>
         )}
+        {/* Empty div to scroll to the bottom */}
         <div ref={messagesEndRef} />
       </div>
       
