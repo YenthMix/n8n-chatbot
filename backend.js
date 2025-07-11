@@ -327,9 +327,12 @@ app.post('/api/botpress-webhook', async (req, res) => {
           });
           
           // Extra debugging for multiple message scenarios
+          console.log(`🔍 MESSAGE COUNT UPDATE - Conversation ${conversationId} now has ${conversationData.messages.length} messages`);
+          console.log(`🔍 Will wait 20 seconds after last webhook before delivering all messages`);
+          console.log(`🔍 Last webhook timestamp: ${lastWebhookActivity.get(conversationId)}`);
+          
           if (conversationData.messages.length >= 2) {
-            console.log(`🔍 MULTIPLE MESSAGES DETECTED - Conversation ${conversationId} now has ${conversationData.messages.length} messages`);
-            console.log(`🔍 Waiting for potential additional messages...`);
+            console.log(`🚨 MULTIPLE MESSAGES DETECTED - This is working! Keep waiting for more...`);
           }
           
           // Clean up the tracked user message since we got a bot response
@@ -445,7 +448,11 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     // Check if n8n is still sending messages
     if (lastActivity) {
       const timeSinceLastWebhook = Date.now() - lastActivity;
-      const isStillActive = timeSinceLastWebhook < 8000; // 8 seconds threshold
+      const isStillActive = timeSinceLastWebhook < 20000; // 20 seconds threshold - much longer
+      
+      console.log(`🔍 WEBHOOK CHECK: ${timeSinceLastWebhook}ms since last webhook for ${conversationId}`);
+      console.log(`🔍 Current message count: ${conversationData.messages.length}`);
+      console.log(`🔍 Is still active? ${isStillActive} (threshold: 20000ms)`);
       
       if (isStillActive) {
         console.log(`⏳ n8n still active (${timeSinceLastWebhook}ms ago), not delivering messages yet. Current count: ${conversationData.messages.length}`);
@@ -457,6 +464,8 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
         });
         return;
       }
+    } else {
+      console.log(`🔍 NO WEBHOOK ACTIVITY TRACKED for ${conversationId} - will deliver what we have`);
     }
     
     // n8n appears to be done, deliver ALL messages at once
@@ -530,6 +539,43 @@ app.get('/api/webhook-activity/:conversationId', async (req, res) => {
     console.error('❌ Error checking webhook activity:', error);
     res.status(500).json({ error: 'Failed to check webhook activity' });
   }
+});
+
+// Debug endpoint to see messages for a specific conversation
+app.get('/api/debug/conversation/:conversationId', async (req, res) => {
+  const { conversationId } = req.params;
+  const conversationData = botMessages.get(conversationId);
+  const lastActivity = lastWebhookActivity.get(conversationId);
+  
+  if (!conversationData) {
+    res.json({ 
+      error: 'No conversation found',
+      conversationId: conversationId
+    });
+    return;
+  }
+  
+  const now = Date.now();
+  const timeSinceLastWebhook = lastActivity ? now - lastActivity : null;
+  
+  res.json({
+    conversationId: conversationId,
+    totalMessages: conversationData.messages.length,
+    lastWebhookActivity: lastActivity,
+    timeSinceLastWebhook: timeSinceLastWebhook,
+    messages: conversationData.messages.map((msg, idx) => ({
+      index: idx + 1,
+      id: msg.id,
+      text: msg.text,
+      timestamp: msg.timestamp,
+      receivedAt: msg.receivedAt,
+      delivered: msg.delivered
+    })),
+    debug: {
+      threshold: 20000,
+      isStillActive: timeSinceLastWebhook ? timeSinceLastWebhook < 20000 : false
+    }
+  });
 });
 
 app.get('/api/botpress-webhook', async (req, res) => {
