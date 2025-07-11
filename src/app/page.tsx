@@ -147,6 +147,8 @@ export default function Home() {
 
     const maxAttempts = 15;
     let attempts = 0;
+    let consecutiveEmptyPolls = 0;
+    const maxEmptyPolls = 5; // Stop after 5 consecutive empty polls
 
     const poll = async () => {
       try {
@@ -178,11 +180,17 @@ export default function Home() {
             }));
             
             setMessages(prev => [...prev, ...botMessages]);
-            setIsLoading(false);
             console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
+            
+            // Continue polling for more messages instead of stopping
+            // Reset both counters since we got messages, but keep polling
+            attempts = 0;
+            consecutiveEmptyPolls = 0;
+            setTimeout(poll, 1500); // Wait 1.5 seconds for potential additional messages
             return;
           } else {
             console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
+            consecutiveEmptyPolls++;
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
@@ -190,9 +198,9 @@ export default function Home() {
         
         // No bot response available yet, try again
         attempts++;
-        if (attempts < maxAttempts) {
-          setTimeout(poll, 1000);
-        } else {
+        
+        // Stop polling if we've tried too many times OR if we've had too many consecutive empty polls
+        if (attempts >= maxAttempts) {
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
             text: "I'm taking longer than usual to respond. Please try sending your message again.",
@@ -200,10 +208,17 @@ export default function Home() {
           };
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
+        } else if (consecutiveEmptyPolls >= maxEmptyPolls) {
+          // We've received some messages but no new ones for a while - stop polling
+          console.log(`✅ Stopping polling after ${consecutiveEmptyPolls} consecutive empty polls - assuming all messages received`);
+          setIsLoading(false);
+        } else {
+          setTimeout(poll, 1000);
         }
         
       } catch (error) {
         attempts++;
+        consecutiveEmptyPolls++;
         
         if (attempts >= maxAttempts) {
           const errorMessage = {
@@ -212,6 +227,9 @@ export default function Home() {
             isBot: true
           };
           setMessages(prev => [...prev, errorMessage]);
+          setIsLoading(false);
+        } else if (consecutiveEmptyPolls >= maxEmptyPolls) {
+          console.log(`✅ Stopping polling after ${consecutiveEmptyPolls} consecutive errors/empty polls`);
           setIsLoading(false);
         } else {
           setTimeout(poll, 1000);
