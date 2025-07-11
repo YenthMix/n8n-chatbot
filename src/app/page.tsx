@@ -185,7 +185,7 @@ export default function Home() {
             console.log(`📦 Still collecting from n8n... (${botData.messageCount || 0} messages so far, ${botData.timeSinceLastWebhook}ms since last)`);
             // Keep polling - reset attempts but continue
             attempts = 0;
-            setTimeout(poll, 2000);
+            setTimeout(poll, 3000); // Longer wait when collecting
             return;
           } else {
             console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
@@ -228,8 +228,8 @@ export default function Home() {
     };
 
     const startPollTimestamp = new Date().toISOString();
-    console.log(`🚀 Starting to poll for bot response at ${startPollTimestamp} in 2 seconds...`);
-    setTimeout(poll, 2000);
+    console.log(`🚀 Starting to poll for bot response at ${startPollTimestamp} in 3 seconds...`);
+    setTimeout(poll, 3000); // Give n8n more time to send all messages
   };
 
   const handleSendMessage = async () => {

@@ -448,14 +448,17 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     // Check if n8n is still sending messages
     if (lastActivity) {
       const timeSinceLastWebhook = Date.now() - lastActivity;
-      const isStillActive = timeSinceLastWebhook < 20000; // 20 seconds threshold - much longer
+      const isStillActive = timeSinceLastWebhook < 10000; // Reduced to 10 seconds but add message count check
       
       console.log(`🔍 WEBHOOK CHECK: ${timeSinceLastWebhook}ms since last webhook for ${conversationId}`);
       console.log(`🔍 Current message count: ${conversationData.messages.length}`);
-      console.log(`🔍 Is still active? ${isStillActive} (threshold: 20000ms)`);
+      console.log(`🔍 Is still active? ${isStillActive} (threshold: 10000ms)`);
       
-      if (isStillActive) {
-        console.log(`⏳ n8n still active (${timeSinceLastWebhook}ms ago), not delivering messages yet. Current count: ${conversationData.messages.length}`);
+      // If we have messages but last activity was very recent (< 5 seconds), always wait
+      const veryRecentActivity = timeSinceLastWebhook < 5000;
+      
+      if (isStillActive || veryRecentActivity) {
+        console.log(`⏳ HOLDING BACK DELIVERY - ${veryRecentActivity ? 'Very recent activity' : 'Still within threshold'} (${timeSinceLastWebhook}ms ago). Current count: ${conversationData.messages.length}`);
         res.json({ 
           success: false, 
           message: 'Still collecting messages from n8n',
