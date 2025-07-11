@@ -505,7 +505,7 @@ app.get('/api/webhook-activity/:conversationId', async (req, res) => {
     }
     
     const timeSinceLastWebhook = now - lastActivity;
-    const isStillActive = timeSinceLastWebhook < 5000; // Consider active if last webhook was within 5 seconds
+    const isStillActive = timeSinceLastWebhook < 15000; // Consider active if last webhook was within 15 seconds
     
     console.log(`🔍 Webhook activity check for ${conversationId}: ${timeSinceLastWebhook}ms since last webhook`);
     

@@ -145,8 +145,9 @@ export default function Home() {
       return;
     }
 
-    const maxAttempts = 20;
+    const maxAttempts = 25;
     let attempts = 0;
+    let emptyPollCount = 0;
 
     const poll = async () => {
       try {
@@ -181,23 +182,30 @@ export default function Home() {
             console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
             
             // Continue polling for more messages instead of stopping
-            // Reset attempts since we got messages, but keep polling
+            // Reset both counters since we got messages, but keep polling
             attempts = 0;
-            setTimeout(poll, 1500); // Wait 1.5 seconds for potential additional messages
+            emptyPollCount = 0;
+            setTimeout(poll, 2000); // Wait 2 seconds for potential additional messages
             return;
           } else {
-            console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, checking webhook activity...`);
+            console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
+            emptyPollCount++;
             
-            // Check if n8n is still actively sending messages
-            const webhookCheck = await fetch(`${BACKEND_URL}/api/webhook-activity/${conversationId}`);
-            if (webhookCheck.ok) {
-              const webhookData = await webhookCheck.json();
-              console.log(`🔍 Webhook activity status:`, webhookData);
+            // Only check webhook activity after several empty polls to give n8n time
+            if (emptyPollCount >= 4) {
+              console.log(`🔍 Checking webhook activity after ${emptyPollCount} empty polls...`);
               
-              if (!webhookData.isActive) {
-                console.log(`✅ n8n appears to be done sending messages - stopping polling`);
-                setIsLoading(false);
-                return;
+              // Check if n8n is still actively sending messages
+              const webhookCheck = await fetch(`${BACKEND_URL}/api/webhook-activity/${conversationId}`);
+              if (webhookCheck.ok) {
+                const webhookData = await webhookCheck.json();
+                console.log(`🔍 Webhook activity status:`, webhookData);
+                
+                if (!webhookData.isActive) {
+                  console.log(`✅ n8n appears to be done sending messages - stopping polling`);
+                  setIsLoading(false);
+                  return;
+                }
               }
             }
           }
