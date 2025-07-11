@@ -302,8 +302,18 @@ app.post('/api/botpress-webhook', async (req, res) => {
           };
           botMessages.set(conversationId, conversationData);
           console.log(`📦 Created new conversation data for: ${conversationId}`);
+          console.log(`📦 Map size after creation: ${botMessages.size}`);
         } else {
           console.log(`📦 Using existing conversation data for: ${conversationId} (${conversationData.messages.length} existing messages)`);
+          console.log(`📦 Map size: ${botMessages.size}`);
+        }
+        
+        // Debug: Verify the data is actually stored
+        const verifyData = botMessages.get(conversationId);
+        if (!verifyData) {
+          console.error(`❌ CRITICAL: Conversation data lost immediately after setting! ConversationId: ${conversationId}`);
+        } else {
+          console.log(`✅ Verified conversation data exists: ${verifyData.messages.length} messages`);
         }
         
         // Check for exact duplicates to avoid storing the same message twice
@@ -436,7 +446,16 @@ app.post('/api/botpress-webhook', async (req, res) => {
     
       // Clean up old messages and user messages (older than 5 minutes)
       const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+      console.log(`🧹 CLEANUP: Starting cleanup of messages older than 5 minutes`);
+      const beforeCleanup = botMessages.size;
+      
       for (const [key, value] of botMessages.entries()) {
+        // Don't clean up conversations that are still receiving messages
+        if (!value.allMessagesReceived && value.deliveryTimeoutId) {
+          console.log(`🧹 SKIPPING cleanup for conversation ${key} - still receiving messages`);
+          continue;
+        }
+        
         // Remove messages older than 5 minutes
         const filteredMessages = value.messages.filter(msg => msg.timestamp >= fiveMinutesAgo);
         if (filteredMessages.length !== value.messages.length) {
@@ -451,7 +470,15 @@ app.post('/api/botpress-webhook', async (req, res) => {
             console.log(`🧹 Cleared delivery timeout for conversation: ${key}`);
           }
           botMessages.delete(key);
+          console.log(`🧹 Deleted empty conversation: ${key}`);
         }
+      }
+      
+      const afterCleanup = botMessages.size;
+      console.log(`🧹 CLEANUP: ${beforeCleanup} → ${afterCleanup} conversations (removed ${beforeCleanup - afterCleanup})`);
+      
+      if (beforeCleanup > 0 && afterCleanup === 0) {
+        console.log(`⚠️ WARNING: All conversations were cleaned up! This might indicate a timing issue.`);
       }
       for (const [key, value] of userMessages.entries()) {
         if (value.timestamp < fiveMinutesAgo) {
