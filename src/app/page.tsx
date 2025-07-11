@@ -299,9 +299,7 @@ export default function Home() {
             !isConnected 
               ? "Connecting to Botpress..." 
               : isLoading 
-                ? isMultiPart 
-                  ? `Bot is typing (${partsCollected} parts)...`
-                  : "Bot is typing..." 
+                ? "Bot is typing..." 
                 : "Type your message here..."
           }
           className="message-input"

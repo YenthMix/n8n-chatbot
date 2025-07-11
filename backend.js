@@ -225,9 +225,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
       
       // Show current state before processing
       console.log(`📊 CURRENT STATE BEFORE PROCESSING:`);
-      console.log(`   Bot responses stored: ${botResponses.size}`);
+      console.log(`   Bot messages stored: ${botMessages.size}`);
       console.log(`   User messages tracked: ${userMessages.size}`);
-      console.log(`   Multi-part responses: ${multiPartResponses.size}`);
     
     const body = req.body;
     let conversationId, botText, isBot;
