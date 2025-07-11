@@ -148,7 +148,7 @@ export default function Home() {
     const maxAttempts = 15;
     let attempts = 0;
     let consecutiveEmptyPolls = 0;
-    const maxEmptyPolls = 5; // Stop after 5 consecutive empty polls
+    const maxEmptyPolls = 8; // Stop after 8 consecutive empty polls (increased for multiple messages)
 
     const poll = async () => {
       try {
@@ -186,7 +186,7 @@ export default function Home() {
             // Reset both counters since we got messages, but keep polling
             attempts = 0;
             consecutiveEmptyPolls = 0;
-            setTimeout(poll, 1500); // Wait 1.5 seconds for potential additional messages
+            setTimeout(poll, 2000); // Wait 2 seconds for potential additional messages (increased for multiple responses)
             return;
           } else {
             console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);

@@ -316,8 +316,14 @@ app.post('/api/botpress-webhook', async (req, res) => {
           console.log(`📊 Total messages for conversation: ${conversationData.messages.length}`);
           console.log(`📋 All messages for this conversation:`);
           conversationData.messages.forEach((msg, idx) => {
-            console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
+            console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt}) [delivered: ${msg.delivered}]`);
           });
+          
+          // Extra debugging for multiple message scenarios
+          if (conversationData.messages.length >= 2) {
+            console.log(`🔍 MULTIPLE MESSAGES DETECTED - Conversation ${conversationId} now has ${conversationData.messages.length} messages`);
+            console.log(`🔍 Waiting for potential additional messages...`);
+          }
           
           // Clean up the tracked user message since we got a bot response
           userMessages.delete(conversationId);
@@ -422,6 +428,7 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       if (undeliveredMessages.length > 0) {
         const deliveryTimestamp = new Date().toISOString();
         console.log(`📤 Sending ${undeliveredMessages.length} bot messages to frontend at ${deliveryTimestamp}:`);
+        console.log(`📤 Total messages in conversation: ${conversationData.messages.length}, Undelivered: ${undeliveredMessages.length}`);
         
         // Log each message being delivered
         undeliveredMessages.forEach((msg, idx) => {
@@ -446,6 +453,9 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       } else {
         console.log(`❌ NO UNDELIVERED MESSAGES for conversation: ${conversationId}`);
         console.log(`📊 Current state: ${botMessages.size} conversation(s) with messages`);
+        if (conversationData) {
+          console.log(`📊 This conversation has ${conversationData.messages.length} total messages, all already delivered`);
+        }
         res.json({ 
           success: false, 
           message: 'No undelivered messages available' 
