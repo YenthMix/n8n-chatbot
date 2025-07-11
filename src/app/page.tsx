@@ -19,25 +19,26 @@ export default function Home() {
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Ref for auto-scrolling to bottom of messages
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    const scrollToBottom = () => {
-      if (messagesContainerRef.current) {
-        const container = messagesContainerRef.current;
-        container.scrollTop = container.scrollHeight;
-      }
-    };
-    
-    // Small delay to ensure DOM is updated before scrolling
-    setTimeout(scrollToBottom, 200);
-  }, [messages, isLoading]); // Trigger on messages change or loading state change
+  // Ref for the messages container to enable auto-scroll
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     initializeChatAPI();
   }, []);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading]);
+
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end'
+      });
+    }
+  };
 
   // Removed old polling mechanism - now using direct bot response endpoint
 
@@ -301,7 +302,7 @@ export default function Home() {
         </div>
       </div>
       
-      <div className="chatbot-messages" ref={messagesContainerRef}>
+      <div className="chatbot-messages">
         {messages.map((message) => (
           <div 
             key={message.id} 
@@ -329,6 +330,7 @@ export default function Home() {
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
       
       <div className="chatbot-input">
