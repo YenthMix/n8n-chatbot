@@ -20,7 +20,7 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
 
   // Ref for the messages container to enable auto-scroll
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     initializeChatAPI();
@@ -32,11 +32,13 @@ export default function Home() {
   }, [messages, isLoading]);
 
   const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'end'
-      });
+    if (messagesContainerRef.current) {
+      // Use a small timeout to ensure DOM has updated
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      }, 100);
     }
   };
 
@@ -302,7 +304,7 @@ export default function Home() {
         </div>
       </div>
       
-      <div className="chatbot-messages">
+      <div className="chatbot-messages" ref={messagesContainerRef}>
         {messages.map((message) => (
           <div 
             key={message.id} 
@@ -330,7 +332,6 @@ export default function Home() {
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
       
       <div className="chatbot-input">
