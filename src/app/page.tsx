@@ -145,9 +145,8 @@ export default function Home() {
       return;
     }
 
-    const maxAttempts = 25;
+    const maxAttempts = 30;
     let attempts = 0;
-    let emptyPollCount = 0;
 
     const poll = async () => {
       try {
@@ -162,14 +161,14 @@ export default function Home() {
           
           if (botData.success && botData.messages) {
             const receivedTimestamp = new Date().toISOString();
-            console.log(`✅ GOT ${botData.messages.length} BOT MESSAGES at ${receivedTimestamp}`);
+            console.log(`✅ GOT ALL ${botData.messages.length} BOT MESSAGES at ${receivedTimestamp} - n8n is done!`);
             
             // Log each message received
             botData.messages.forEach((msg: any, idx: number) => {
               console.log(`   Message ${idx + 1}: "${msg.text}" (received: ${msg.receivedAt})`);
             });
             
-            // Add each message separately to the chat in timestamp order
+            // Add ALL messages at once to the chat in timestamp order
             const botMessages = botData.messages.map((msg: any) => ({
               id: msg.id,
               text: msg.text,
@@ -179,35 +178,17 @@ export default function Home() {
             }));
             
             setMessages(prev => [...prev, ...botMessages]);
-            console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
-            
-            // Continue polling for more messages instead of stopping
-            // Reset both counters since we got messages, but keep polling
+            setIsLoading(false);
+            console.log(`💬 ALL ${botMessages.length} bot messages delivered at once to chat interface at ${receivedTimestamp}`);
+            return;
+          } else if (botData.message === 'Still collecting messages from n8n') {
+            console.log(`📦 Still collecting from n8n... (${botData.messageCount || 0} messages so far, ${botData.timeSinceLastWebhook}ms since last)`);
+            // Keep polling - reset attempts but continue
             attempts = 0;
-            emptyPollCount = 0;
-            setTimeout(poll, 2000); // Wait 2 seconds for potential additional messages
+            setTimeout(poll, 2000);
             return;
           } else {
             console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
-            emptyPollCount++;
-            
-            // Only check webhook activity after several empty polls to give n8n time
-            if (emptyPollCount >= 4) {
-              console.log(`🔍 Checking webhook activity after ${emptyPollCount} empty polls...`);
-              
-              // Check if n8n is still actively sending messages
-              const webhookCheck = await fetch(`${BACKEND_URL}/api/webhook-activity/${conversationId}`);
-              if (webhookCheck.ok) {
-                const webhookData = await webhookCheck.json();
-                console.log(`🔍 Webhook activity status:`, webhookData);
-                
-                if (!webhookData.isActive) {
-                  console.log(`✅ n8n appears to be done sending messages - stopping polling`);
-                  setIsLoading(false);
-                  return;
-                }
-              }
-            }
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
@@ -309,7 +290,7 @@ export default function Home() {
                 <span></span>
               </div>
               <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
-                Bot is responding...
+                Collecting all responses from n8n...
               </div>
             </div>
           </div>

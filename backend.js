@@ -426,60 +426,71 @@ app.post('/api/botpress-webhook', async (req, res) => {
   });
 });
 
-// New endpoint for frontend to get bot messages
+// New endpoint for frontend to get bot messages (only when n8n is done)
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
     const conversationData = botMessages.get(conversationId);
+    const lastActivity = lastWebhookActivity.get(conversationId);
     
-    if (conversationData && conversationData.messages.length > 0) {
-      // Find undelivered messages sorted by timestamp
-      const undeliveredMessages = conversationData.messages
-        .filter(msg => !msg.delivered)
-        .sort((a, b) => a.timestamp - b.timestamp);
-      
-      if (undeliveredMessages.length > 0) {
-        const deliveryTimestamp = new Date().toISOString();
-        console.log(`📤 Sending ${undeliveredMessages.length} bot messages to frontend at ${deliveryTimestamp}:`);
-        console.log(`📤 Total messages in conversation: ${conversationData.messages.length}, Undelivered: ${undeliveredMessages.length}`);
-        
-        // Log each message being delivered
-        undeliveredMessages.forEach((msg, idx) => {
-          console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}" (${msg.receivedAt})`);
-        });
-        
-        // Mark messages as delivered
-        undeliveredMessages.forEach(msg => {
-          msg.delivered = true;
-        });
-        
-        // Show final state after delivery
-        console.log(`📊 STATE AFTER DELIVERY:`);
-        console.log(`   Bot messages stored: ${botMessages.size}`);
-        console.log(`   User messages tracked: ${userMessages.size}`);
-        console.log(`🏁 Ready for next message cycle`);
-      
-        res.json({ 
-          success: true, 
-          messages: undeliveredMessages
-        });
-      } else {
-        console.log(`❌ NO UNDELIVERED MESSAGES for conversation: ${conversationId}`);
-        console.log(`📊 Current state: ${botMessages.size} conversation(s) with messages`);
-        if (conversationData) {
-          console.log(`📊 This conversation has ${conversationData.messages.length} total messages, all already delivered`);
-        }
-        res.json({ 
-          success: false, 
-          message: 'No undelivered messages available' 
-        });
-      }
-    } else {
+    if (!conversationData || conversationData.messages.length === 0) {
       console.log(`❌ NO BOT MESSAGES FOUND for conversation: ${conversationId}`);
-      console.log(`📊 Current state: ${botMessages.size} conversation(s) with messages`);
       res.json({ 
         success: false, 
         message: 'No bot messages available' 
+      });
+      return;
+    }
+    
+    // Check if n8n is still sending messages
+    if (lastActivity) {
+      const timeSinceLastWebhook = Date.now() - lastActivity;
+      const isStillActive = timeSinceLastWebhook < 8000; // 8 seconds threshold
+      
+      if (isStillActive) {
+        console.log(`⏳ n8n still active (${timeSinceLastWebhook}ms ago), not delivering messages yet. Current count: ${conversationData.messages.length}`);
+        res.json({ 
+          success: false, 
+          message: 'Still collecting messages from n8n',
+          messageCount: conversationData.messages.length,
+          timeSinceLastWebhook: timeSinceLastWebhook
+        });
+        return;
+      }
+    }
+    
+    // n8n appears to be done, deliver ALL messages at once
+    const allMessages = conversationData.messages
+      .filter(msg => !msg.delivered)
+      .sort((a, b) => a.timestamp - b.timestamp);
+    
+    if (allMessages.length > 0) {
+      const deliveryTimestamp = new Date().toISOString();
+      console.log(`📤 N8N APPEARS DONE - Delivering ALL ${allMessages.length} messages at once at ${deliveryTimestamp}:`);
+      console.log(`📤 Total messages collected: ${conversationData.messages.length}`);
+      
+      // Log each message being delivered
+      allMessages.forEach((msg, idx) => {
+        console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}" (${msg.receivedAt})`);
+      });
+      
+      // Mark ALL messages as delivered
+      allMessages.forEach(msg => {
+        msg.delivered = true;
+      });
+      
+      console.log(`✅ ALL MESSAGES DELIVERED FOR ${conversationId}`);
+    
+      res.json({ 
+        success: true, 
+        messages: allMessages,
+        totalCollected: conversationData.messages.length
+      });
+    } else {
+      console.log(`❌ NO UNDELIVERED MESSAGES for conversation: ${conversationId}`);
+      res.json({ 
+        success: false, 
+        message: 'No undelivered messages available' 
       });
     }
   } catch (error) {
