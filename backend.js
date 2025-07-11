@@ -60,6 +60,9 @@ const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 // Store bot messages separately by timestamp (in production, use Redis or database)
 const botMessages = new Map(); // conversationId -> { messages: [...], lastDelivered: timestamp }
 
+// Global message storage to prevent race conditions
+const globalMessages = {}; // conversationId -> messages array
+
 // Track user messages to distinguish them from bot responses
 const userMessages = new Map();
 
@@ -113,6 +116,12 @@ app.post('/api/track-user-message', async (req, res) => {
     }
     botMessages.delete(conversationId);
     console.log(`   ✅ Removed old bot messages`);
+  }
+  
+  // Also clear global storage for this conversation
+  if (globalMessages[conversationId]) {
+    delete globalMessages[conversationId];
+    console.log(`   ✅ Cleared global message storage`);
   }
   
   // Store user message with timestamp to track what the user actually sent
@@ -291,7 +300,27 @@ app.post('/api/botpress-webhook', async (req, res) => {
       if (conversationId && botText && !botText.includes('{{ $json')) {
         console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${botText}"`);
         
-        // Get or create conversation data - IMPORTANT: Use atomic operation to prevent race conditions
+        // SIMPLE FIX: Use both Map and global object to prevent race conditions
+        if (!globalMessages[conversationId]) {
+          globalMessages[conversationId] = [];
+          console.log(`📦 Created new global storage for: ${conversationId}`);
+        }
+        
+        // Store message in global storage immediately
+        const messageTimestamp = Date.now();
+        const newMessage = {
+          text: botText,
+          timestamp: messageTimestamp,
+          receivedAt: botMessageTimestamp,
+          id: `bot-msg-${messageTimestamp}-${Math.random().toString(36).substr(2, 6)}`,
+          delivered: false
+        };
+        
+        globalMessages[conversationId].push(newMessage);
+        console.log(`📝 STORED MESSAGE ${globalMessages[conversationId].length}: "${botText}"`);
+        console.log(`📊 Total messages in global storage: ${globalMessages[conversationId].length}`);
+        
+        // Also update Map for compatibility
         let conversationData = botMessages.get(conversationId);
         if (!conversationData) {
           conversationData = {
@@ -301,53 +330,13 @@ app.post('/api/botpress-webhook', async (req, res) => {
             deliveryTimeoutId: null
           };
           botMessages.set(conversationId, conversationData);
-          console.log(`📦 Created new conversation data for: ${conversationId}`);
-          console.log(`📦 Map size after creation: ${botMessages.size}`);
-        } else {
-          console.log(`📦 Using existing conversation data for: ${conversationId} (${conversationData.messages.length} existing messages)`);
-          console.log(`📦 Map size: ${botMessages.size}`);
         }
         
-        // Debug: Verify the data is actually stored
-        const verifyData = botMessages.get(conversationId);
-        if (!verifyData) {
-          console.error(`❌ CRITICAL: Conversation data lost immediately after setting! ConversationId: ${conversationId}`);
-        } else {
-          console.log(`✅ Verified conversation data exists: ${verifyData.messages.length} messages`);
-        }
+        // Sync global storage to Map
+        conversationData.messages = [...globalMessages[conversationId]];
+        conversationData.messages.sort((a, b) => a.timestamp - b.timestamp);
         
-        // Check for exact duplicates to avoid storing the same message twice
-        const isExactDuplicate = conversationData.messages.some(existingMsg => 
-          existingMsg.text.trim() === botText.trim()
-        );
-        
-        if (isExactDuplicate) {
-          console.log(`⚠️ EXACT DUPLICATE MESSAGE DETECTED: "${botText}"`);
-          console.log(`   Skipping exact duplicate`);
-        } else {
-          // Store this message separately with its own timestamp
-          const messageTimestamp = Date.now();
-          const newMessage = {
-            text: botText,
-            timestamp: messageTimestamp,
-            receivedAt: botMessageTimestamp,
-            id: `bot-msg-${messageTimestamp}-${Math.random().toString(36).substr(2, 6)}`,
-            delivered: false
-          };
-          
-          conversationData.messages.push(newMessage);
-          
-          // Sort messages by timestamp to maintain chronological order
-          conversationData.messages.sort((a, b) => a.timestamp - b.timestamp);
-          
-          console.log(`📝 Stored individual message ${conversationData.messages.length} at ${botMessageTimestamp}: "${botText}"`);
-          console.log(`📊 Total messages for conversation: ${conversationData.messages.length}`);
-          console.log(`📋 All messages for this conversation:`);
-          conversationData.messages.forEach((msg, idx) => {
-            console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt}) [delivered: ${msg.delivered}]`);
-          });
-          
-          // Clear any existing timeout for this conversation BEFORE adding new message
+                  // Clear any existing timeout for this conversation
           if (conversationData.deliveryTimeoutId) {
             clearTimeout(conversationData.deliveryTimeoutId);
             console.log(`🧹 Cleared previous delivery timeout for conversation: ${conversationId}`);
@@ -358,21 +347,25 @@ app.post('/api/botpress-webhook', async (req, res) => {
           console.log(`⏰ Setting 3-second timeout to deliver all messages after n8n finishes...`);
           conversationData.deliveryTimeoutId = setTimeout(() => {
             console.log(`⏰ TIMEOUT: N8N finished sending messages for ${conversationId}`);
-            console.log(`🎯 Final message count: ${conversationData.messages.length} messages`);
+            
+            // Use global storage for final count and delivery
+            const finalMessages = globalMessages[conversationId] || [];
+            console.log(`🎯 Final message count from global storage: ${finalMessages.length} messages`);
             
             // Sort all messages by timestamp for final delivery
-            conversationData.messages.sort((a, b) => a.timestamp - b.timestamp);
+            finalMessages.sort((a, b) => a.timestamp - b.timestamp);
             
             console.log(`📋 Final message order (sorted by timestamp):`);
-            conversationData.messages.forEach((msg, index) => {
+            finalMessages.forEach((msg, index) => {
               console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
             });
             
-            // Mark all as ready for delivery
+            // Update conversation data with final sorted messages
+            conversationData.messages = finalMessages;
             conversationData.allMessagesReceived = true;
             conversationData.deliveryTimeoutId = null;
             
-            console.log(`✅ All ${conversationData.messages.length} messages ready for delivery in correct timestamp order`);
+            console.log(`✅ All ${finalMessages.length} messages ready for delivery in correct timestamp order`);
             
             // Clean up the tracked user message since we got bot response(s)
             userMessages.delete(conversationId);
@@ -381,7 +374,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
           }, 3000); // Wait 3 seconds after last message before delivering all
           
           console.log(`⏱️ Waiting 3 seconds for additional messages from n8n...`);
-        }
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
@@ -505,7 +497,18 @@ app.post('/api/botpress-webhook', async (req, res) => {
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const conversationData = botMessages.get(conversationId);
+    let conversationData = botMessages.get(conversationId);
+    
+    // FALLBACK: Use global storage if Map data is missing
+    if (!conversationData && globalMessages[conversationId]) {
+      console.log(`📤 Using global storage fallback for conversation: ${conversationId}`);
+      conversationData = {
+        messages: globalMessages[conversationId],
+        allMessagesReceived: true, // Assume complete if in global storage
+        lastDelivered: 0,
+        deliveryTimeoutId: null
+      };
+    }
     
     if (conversationData && conversationData.messages.length > 0) {
       // Only deliver messages if n8n has finished sending all messages
