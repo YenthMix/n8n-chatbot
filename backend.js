@@ -316,64 +316,68 @@ app.post('/api/botpress-webhook', async (req, res) => {
           delivered: false
         };
         
-        globalMessages[conversationId].push(newMessage);
+                globalMessages[conversationId].push(newMessage);
         console.log(`📝 STORED MESSAGE ${globalMessages[conversationId].length}: "${botText}"`);
         console.log(`📊 Total messages in global storage: ${globalMessages[conversationId].length}`);
         
-        // Also update Map for compatibility
-        let conversationData = botMessages.get(conversationId);
-        if (!conversationData) {
-          conversationData = {
-            messages: [],
-            lastDelivered: 0,
-            allMessagesReceived: false,
-            deliveryTimeoutId: null
-          };
-          botMessages.set(conversationId, conversationData);
+        // CRITICAL FIX: Use SHARED timeout for the conversation, not per-message timeout
+        // Clear any existing timeout - this is the key fix
+        if (global.conversationTimeouts && global.conversationTimeouts[conversationId]) {
+          clearTimeout(global.conversationTimeouts[conversationId]);
+          console.log(`🧹 Cleared previous GLOBAL timeout for conversation: ${conversationId}`);
         }
         
-        // Sync global storage to Map
-        conversationData.messages = [...globalMessages[conversationId]];
-        conversationData.messages.sort((a, b) => a.timestamp - b.timestamp);
+        // Initialize global timeouts if not exists
+        if (!global.conversationTimeouts) {
+          global.conversationTimeouts = {};
+        }
         
-                  // Clear any existing timeout for this conversation
-          if (conversationData.deliveryTimeoutId) {
-            clearTimeout(conversationData.deliveryTimeoutId);
-            console.log(`🧹 Cleared previous delivery timeout for conversation: ${conversationId}`);
-            conversationData.deliveryTimeoutId = null;
+        // Set ONE timeout per conversation that gets reset with each new message
+        console.log(`⏰ Setting 3-second timeout to deliver ALL messages after n8n finishes...`);
+        global.conversationTimeouts[conversationId] = setTimeout(() => {
+          console.log(`⏰ TIMEOUT: N8N finished sending messages for ${conversationId}`);
+          
+          // Use global storage for final count and delivery
+          const finalMessages = globalMessages[conversationId] || [];
+          console.log(`🎯 Final message count from global storage: ${finalMessages.length} messages`);
+          
+          // Sort all messages by timestamp for final delivery
+          finalMessages.sort((a, b) => a.timestamp - b.timestamp);
+          
+          console.log(`📋 Final message order (sorted by timestamp):`);
+          finalMessages.forEach((msg, index) => {
+            console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
+          });
+          
+          // Update Map data for delivery
+          let conversationData = botMessages.get(conversationId);
+          if (!conversationData) {
+            conversationData = {
+              messages: [],
+              lastDelivered: 0,
+              allMessagesReceived: false,
+              deliveryTimeoutId: null
+            };
+            botMessages.set(conversationId, conversationData);
           }
           
-          // Set timeout to deliver all messages after n8n stops sending (wait 3 seconds after last message)
-          console.log(`⏰ Setting 3-second timeout to deliver all messages after n8n finishes...`);
-          conversationData.deliveryTimeoutId = setTimeout(() => {
-            console.log(`⏰ TIMEOUT: N8N finished sending messages for ${conversationId}`);
-            
-            // Use global storage for final count and delivery
-            const finalMessages = globalMessages[conversationId] || [];
-            console.log(`🎯 Final message count from global storage: ${finalMessages.length} messages`);
-            
-            // Sort all messages by timestamp for final delivery
-            finalMessages.sort((a, b) => a.timestamp - b.timestamp);
-            
-            console.log(`📋 Final message order (sorted by timestamp):`);
-            finalMessages.forEach((msg, index) => {
-              console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
-            });
-            
-            // Update conversation data with final sorted messages
-            conversationData.messages = finalMessages;
-            conversationData.allMessagesReceived = true;
-            conversationData.deliveryTimeoutId = null;
-            
-            console.log(`✅ All ${finalMessages.length} messages ready for delivery in correct timestamp order`);
-            
-            // Clean up the tracked user message since we got bot response(s)
-            userMessages.delete(conversationId);
-            console.log(`🧹 Cleaned up tracked user message for conversation: ${conversationId}`);
-            
-          }, 3000); // Wait 3 seconds after last message before delivering all
+          // Set all messages as ready for delivery
+          conversationData.messages = finalMessages;
+          conversationData.allMessagesReceived = true;
+          conversationData.deliveryTimeoutId = null;
           
-          console.log(`⏱️ Waiting 3 seconds for additional messages from n8n...`);
+          console.log(`✅ All ${finalMessages.length} messages ready for delivery in correct timestamp order`);
+          
+          // Clean up the tracked user message since we got bot response(s)
+          userMessages.delete(conversationId);
+          console.log(`🧹 Cleaned up tracked user message for conversation: ${conversationId}`);
+          
+          // Clean up the global timeout
+          delete global.conversationTimeouts[conversationId];
+          
+        }, 3000); // Wait 3 seconds after last message before delivering all
+        
+        console.log(`⏱️ Waiting 3 seconds for additional messages from n8n...`);
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
