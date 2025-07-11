@@ -32,66 +32,32 @@ export default function Home() {
   }, [messages, isLoading]);
 
   const scrollToBottom = () => {
-    console.log('🔄 scrollToBottom called');
-    
     if (messagesContainerRef.current) {
       const container = messagesContainerRef.current;
-      const isOverflowing = container.scrollHeight > container.clientHeight;
-      const canScroll = container.scrollHeight - container.clientHeight > 0;
       
-      console.log('📏 Container info:', {
-        scrollHeight: container.scrollHeight,
-        scrollTop: container.scrollTop,
-        clientHeight: container.clientHeight,
-        isOverflowing: isOverflowing,
-        canScroll: canScroll,
-        maxScrollTop: container.scrollHeight - container.clientHeight
-      });
+      // Simple, direct approach - scroll to bottom immediately and with a delay
+      const scrollToEnd = () => {
+        // Use both scrollTop and scrollTo for maximum compatibility
+        container.scrollTop = container.scrollHeight;
+        container.scrollTo(0, container.scrollHeight);
+      };
       
-      if (!isOverflowing) {
-        console.log('⚠️ Content is not overflowing - no scroll needed');
-        return;
-      }
+      // Immediate scroll
+      scrollToEnd();
       
-      // Try multiple methods to ensure scrolling works
-      const scrollMethods = [
-        () => {
-          // Method 1: Direct scroll
-          container.scrollTop = container.scrollHeight;
-        },
-        () => {
-          // Method 2: Smooth scroll
-          container.scrollTo({
-            top: container.scrollHeight,
-            behavior: 'smooth'
-          });
-        },
-        () => {
-          // Method 3: Force scroll with requestAnimationFrame
-          requestAnimationFrame(() => {
-            container.scrollTop = container.scrollHeight;
-          });
-        }
-      ];
-      
-      // Try immediate scroll
-      scrollMethods[0]();
-      
-      // Also try with timeout to handle DOM updates
-      setTimeout(() => {
-        console.log('⏰ Timeout scroll triggered');
-        scrollMethods[1]();
-        
-        // Final fallback
-        setTimeout(() => {
-          scrollMethods[2]();
-          console.log('🎯 Final scroll position:', container.scrollTop);
-        }, 50);
-      }, 100);
-    } else {
-      console.log('❌ messagesContainerRef.current is null');
+      // Delayed scroll to handle DOM updates
+      setTimeout(scrollToEnd, 10);
+      setTimeout(scrollToEnd, 100);
+      setTimeout(scrollToEnd, 200);
     }
   };
+
+  // Also trigger scroll after the component renders
+  useEffect(() => {
+    // Small delay to ensure the DOM has updated
+    const timer = setTimeout(scrollToBottom, 50);
+    return () => clearTimeout(timer);
+  });
 
   // Removed old polling mechanism - now using direct bot response endpoint
 
@@ -383,24 +349,6 @@ export default function Home() {
             </div>
           </div>
         )}
-      </div>
-      
-      {/* Debug scroll button */}
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px', background: '#f0f0f0' }}>
-        <button 
-          onClick={scrollToBottom}
-          style={{
-            padding: '8px 16px',
-            fontSize: '12px',
-            background: '#e91e63',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
-        >
-          🔄 Test Auto-Scroll
-        </button>
       </div>
       
       <div className="chatbot-input">
