@@ -1,12 +1,21 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+
+// Message interface
+interface Message {
+  id: string;
+  text: string;
+  isBot: boolean;
+  partCount?: number;
+  receivedAt?: string;
+}
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
@@ -18,36 +27,6 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-
-  // Ref for the messages container to enable auto-scrolling
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    const scrollToBottom = () => {
-      // Method 1: Scroll the messages end element into view
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'end'
-        });
-      }
-      
-      // Method 2: Also set scrollTop as fallback
-      if (messagesContainerRef.current) {
-        const container = messagesContainerRef.current;
-        container.scrollTo({
-          top: container.scrollHeight,
-          behavior: 'smooth'
-        });
-      }
-    };
-
-    // Use a small delay to ensure the DOM has been updated
-    const timer = setTimeout(scrollToBottom, 100);
-    return () => clearTimeout(timer);
-  }, [messages, isLoading]); // Trigger on messages change and loading state change
 
   useEffect(() => {
     initializeChatAPI();
@@ -103,7 +82,8 @@ export default function Home() {
       const errorMessage = {
         id: `error-${Date.now()}`,
         text: "Failed to connect to Botpress. Please make sure the backend server is running with 'npm run backend'.",
-        isBot: true
+        isBot: true,
+        receivedAt: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
     }
@@ -241,7 +221,8 @@ export default function Home() {
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
             text: "I'm taking longer than usual to respond. Please try sending your message again.",
-            isBot: true
+            isBot: true,
+            receivedAt: new Date().toISOString()
           };
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
@@ -256,7 +237,8 @@ export default function Home() {
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
             text: "I'm having trouble connecting right now. Please try again.",
-            isBot: true
+            isBot: true,
+            receivedAt: new Date().toISOString()
           };
           setMessages(prev => [...prev, errorMessage]);
           setIsLoading(false);
@@ -291,7 +273,8 @@ export default function Home() {
       const errorMessage = { 
         id: `error-${Date.now()}`, 
         text: "Sorry, I'm having trouble connecting to the bot right now. Please try again later.", 
-        isBot: true 
+        isBot: true,
+        receivedAt: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
@@ -315,7 +298,7 @@ export default function Home() {
         </div>
       </div>
       
-      <div className="chatbot-messages" ref={messagesContainerRef}>
+      <div className="chatbot-messages">
         {messages.map((message) => (
           <div 
             key={message.id} 
@@ -323,6 +306,16 @@ export default function Home() {
           >
             <div className="message-content">
               {message.text}
+              {message.isBot && message.receivedAt && (
+                <div className="message-timestamp">
+                  {new Date(message.receivedAt).toLocaleTimeString('en-US', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  })}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -343,8 +336,6 @@ export default function Home() {
             </div>
           </div>
         )}
-        {/* Empty div to scroll to the bottom */}
-        <div ref={messagesEndRef} />
       </div>
       
       <div className="chatbot-input">
