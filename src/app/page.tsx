@@ -145,8 +145,10 @@ export default function Home() {
       return;
     }
 
-    const maxAttempts = 40;
+    const maxAttempts = 15;
     let attempts = 0;
+    let consecutiveEmptyPolls = 0;
+    const maxEmptyPolls = 8; // Stop after 8 consecutive empty polls (increased for multiple messages)
 
     const poll = async () => {
       try {
@@ -161,16 +163,14 @@ export default function Home() {
           
           if (botData.success && botData.messages) {
             const receivedTimestamp = new Date().toISOString();
-            console.log(`🎉 FRONTEND: GOT ALL ${botData.messages.length} BOT MESSAGES at ${receivedTimestamp} - n8n is done!`);
-            console.log(`🎉 FRONTEND: Backend delivered at: ${botData.deliveredAt || 'unknown'}`);
-            console.log(`🎉 FRONTEND: Total collected by backend: ${botData.totalCollected || 'unknown'}`);
+            console.log(`✅ GOT ${botData.messages.length} BOT MESSAGES at ${receivedTimestamp}`);
             
             // Log each message received
             botData.messages.forEach((msg: any, idx: number) => {
-              console.log(`   📨 Frontend received message ${idx + 1}: "${msg.text}" (backend received: ${msg.receivedAt})`);
+              console.log(`   Message ${idx + 1}: "${msg.text}" (received: ${msg.receivedAt})`);
             });
             
-            // Add ALL messages at once to the chat in timestamp order
+            // Add each message separately to the chat in timestamp order
             const botMessages = botData.messages.map((msg: any) => ({
               id: msg.id,
               text: msg.text,
@@ -179,23 +179,18 @@ export default function Home() {
               timestamp: msg.timestamp
             }));
             
-            console.log(`🎯 FRONTEND: About to add ${botMessages.length} messages to UI`);
-            setMessages(prev => {
-              const newMessages = [...prev, ...botMessages];
-              console.log(`🎯 FRONTEND: UI now has ${newMessages.length} total messages`);
-              return newMessages;
-            });
-            setIsLoading(false);
-            console.log(`💬 🏁 FRONTEND: ALL ${botMessages.length} bot messages delivered to UI at ${receivedTimestamp}`);
-            return;
-          } else if (botData.message === 'Still collecting messages from n8n') {
-            console.log(`📦 Still collecting from n8n... (${botData.messageCount || 0} messages so far, ${botData.timeSinceLastWebhook}ms since last)`);
-            // Keep polling - reset attempts but continue
+            setMessages(prev => [...prev, ...botMessages]);
+            console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
+            
+            // Continue polling for more messages instead of stopping
+            // Reset both counters since we got messages, but keep polling
             attempts = 0;
-            setTimeout(poll, 3000); // Longer wait when collecting
+            consecutiveEmptyPolls = 0;
+            setTimeout(poll, 2000); // Wait 2 seconds for potential additional messages (increased for multiple responses)
             return;
           } else {
             console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
+            consecutiveEmptyPolls++;
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
@@ -204,7 +199,7 @@ export default function Home() {
         // No bot response available yet, try again
         attempts++;
         
-        // Stop polling if we've tried too many times
+        // Stop polling if we've tried too many times OR if we've had too many consecutive empty polls
         if (attempts >= maxAttempts) {
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
@@ -213,12 +208,17 @@ export default function Home() {
           };
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
+        } else if (consecutiveEmptyPolls >= maxEmptyPolls) {
+          // We've received some messages but no new ones for a while - stop polling
+          console.log(`✅ Stopping polling after ${consecutiveEmptyPolls} consecutive empty polls - assuming all messages received`);
+          setIsLoading(false);
         } else {
           setTimeout(poll, 1000);
         }
         
       } catch (error) {
         attempts++;
+        consecutiveEmptyPolls++;
         
         if (attempts >= maxAttempts) {
           const errorMessage = {
@@ -228,6 +228,9 @@ export default function Home() {
           };
           setMessages(prev => [...prev, errorMessage]);
           setIsLoading(false);
+        } else if (consecutiveEmptyPolls >= maxEmptyPolls) {
+          console.log(`✅ Stopping polling after ${consecutiveEmptyPolls} consecutive errors/empty polls`);
+          setIsLoading(false);
         } else {
           setTimeout(poll, 1000);
         }
@@ -235,8 +238,8 @@ export default function Home() {
     };
 
     const startPollTimestamp = new Date().toISOString();
-    console.log(`🚀 Starting to poll for bot response at ${startPollTimestamp} in 3 seconds...`);
-    setTimeout(poll, 3000); // Give n8n more time to send all messages
+    console.log(`🚀 Starting to poll for bot response at ${startPollTimestamp} in 2 seconds...`);
+    setTimeout(poll, 2000);
   };
 
   const handleSendMessage = async () => {
@@ -297,7 +300,7 @@ export default function Home() {
                 <span></span>
               </div>
               <div style={{ fontSize: '11px', marginTop: '5px', opacity: 0.7 }}>
-                Collecting all responses from n8n...
+                Bot is responding...
               </div>
             </div>
           </div>
