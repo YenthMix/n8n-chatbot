@@ -19,45 +19,28 @@ export default function Home() {
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Ref for the messages container to enable auto-scroll
+  // Ref for auto-scrolling to the bottom of messages
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    initializeChatAPI();
-  }, []);
+  // Auto-scroll function
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end'
+      });
+    }
+  };
 
-  // Auto-scroll to bottom when messages change
+  // Scroll to bottom whenever messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const scrollToBottom = () => {
-    if (messagesContainerRef.current) {
-      const container = messagesContainerRef.current;
-      
-      // Simple, direct approach - scroll to bottom immediately and with a delay
-      const scrollToEnd = () => {
-        // Use both scrollTop and scrollTo for maximum compatibility
-        container.scrollTop = container.scrollHeight;
-        container.scrollTo(0, container.scrollHeight);
-      };
-      
-      // Immediate scroll
-      scrollToEnd();
-      
-      // Delayed scroll to handle DOM updates
-      setTimeout(scrollToEnd, 10);
-      setTimeout(scrollToEnd, 100);
-      setTimeout(scrollToEnd, 200);
-    }
-  };
-
-  // Also trigger scroll after the component renders
   useEffect(() => {
-    // Small delay to ensure the DOM has updated
-    const timer = setTimeout(scrollToBottom, 50);
-    return () => clearTimeout(timer);
-  });
+    initializeChatAPI();
+  }, []);
 
   // Removed old polling mechanism - now using direct bot response endpoint
 
@@ -349,6 +332,7 @@ export default function Home() {
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
       
       <div className="chatbot-input">

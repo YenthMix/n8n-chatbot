@@ -71,9 +71,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 15px;
-  scroll-behavior: smooth;
-  max-height: 400px; /* Force a smaller height to ensure scrolling */
-  min-height: 300px;
 }
 
 .message {
