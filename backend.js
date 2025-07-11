@@ -66,6 +66,9 @@ const userMessages = new Map();
 // Track webhook processing to prevent race conditions
 const webhookQueue = new Map(); // conversationId -> processing status
 
+// Track when last webhook was received per conversation
+const lastWebhookActivity = new Map(); // conversationId -> timestamp of last webhook
+
 app.post('/api/user', async (req, res) => {
   try {
     const response = await fetch(`${BASE_URL}/users`, {
@@ -312,8 +315,12 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Sort messages by timestamp to maintain chronological order
           conversationData.messages.sort((a, b) => a.timestamp - b.timestamp);
           
+          // Track webhook activity for this conversation
+          lastWebhookActivity.set(conversationId, Date.now());
+          
           console.log(`📝 Stored individual message ${conversationData.messages.length} at ${botMessageTimestamp}: "${botText}"`);
           console.log(`📊 Total messages for conversation: ${conversationData.messages.length}`);
+          console.log(`⏰ Updated last webhook activity for ${conversationId}`);
           console.log(`📋 All messages for this conversation:`);
           conversationData.messages.forEach((msg, idx) => {
             console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt}) [delivered: ${msg.delivered}]`);
@@ -403,6 +410,12 @@ app.post('/api/botpress-webhook', async (req, res) => {
           console.log(`🧹 Cleaned up old webhook queue entry for conversation: ${key}`);
         }
       }
+      for (const [key, timestamp] of lastWebhookActivity.entries()) {
+        if (timestamp < fiveMinutesAgo) {
+          lastWebhookActivity.delete(key);
+          console.log(`🧹 Cleaned up old webhook activity for conversation: ${key}`);
+        }
+      }
       
       console.log(`✅ Webhook processing completed for request ${requestId}`);
       
@@ -475,6 +488,39 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
   }
 });
 
+// Check if n8n is still sending messages for a conversation
+app.get('/api/webhook-activity/:conversationId', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const lastActivity = lastWebhookActivity.get(conversationId);
+    const now = Date.now();
+    
+    if (!lastActivity) {
+      res.json({ 
+        isActive: false, 
+        lastActivity: null,
+        message: 'No webhook activity tracked for this conversation'
+      });
+      return;
+    }
+    
+    const timeSinceLastWebhook = now - lastActivity;
+    const isStillActive = timeSinceLastWebhook < 5000; // Consider active if last webhook was within 5 seconds
+    
+    console.log(`🔍 Webhook activity check for ${conversationId}: ${timeSinceLastWebhook}ms since last webhook`);
+    
+    res.json({ 
+      isActive: isStillActive,
+      lastActivity: lastActivity,
+      timeSinceLastWebhook: timeSinceLastWebhook,
+      message: isStillActive ? 'n8n might still be sending messages' : 'n8n appears to be done sending messages'
+    });
+  } catch (error) {
+    console.error('❌ Error checking webhook activity:', error);
+    res.status(500).json({ error: 'Failed to check webhook activity' });
+  }
+});
+
 app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
 });
@@ -499,13 +545,15 @@ app.post('/api/debug/clear-all', async (req, res) => {
   const beforeCounts = {
     botMessages: botMessages.size,
     userMessages: userMessages.size,
-    totalBotMessages: Array.from(botMessages.values()).reduce((total, conv) => total + conv.messages.length, 0)
+    totalBotMessages: Array.from(botMessages.values()).reduce((total, conv) => total + conv.messages.length, 0),
+    webhookActivity: lastWebhookActivity.size
   };
   
   // Clear all maps
   botMessages.clear();
   userMessages.clear();
   webhookQueue.clear();
+  lastWebhookActivity.clear();
   
   console.log(`✅ Cleared all state. Before: ${JSON.stringify(beforeCounts)}, After: all 0`);
   
@@ -547,15 +595,18 @@ app.get('/api/debug/stored-responses', async (req, res) => {
   console.log(`   Total bot messages: ${totalBotMessages}`);
   console.log(`   User messages: ${userMessages.size} tracked`);
   console.log(`   Webhook queue: ${webhookQueue.size} processing`);
+  console.log(`   Webhook activity tracked: ${lastWebhookActivity.size} conversations`);
   
   res.json({ 
     totalBotMessageConversations: botMessages.size,
     totalBotMessages: totalBotMessages,
     totalUserMessages: userMessages.size,
     totalWebhookQueue: webhookQueue.size,
+    totalWebhookActivity: lastWebhookActivity.size,
     botMessages: allBotMessages,
     userMessages: allUserMessages,
     webhookQueue: Object.fromEntries(webhookQueue),
+    webhookActivity: Object.fromEntries(lastWebhookActivity),
     timestamp: Date.now()
   });
 });

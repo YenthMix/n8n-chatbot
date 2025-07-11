@@ -145,10 +145,8 @@ export default function Home() {
       return;
     }
 
-    const maxAttempts = 15;
+    const maxAttempts = 20;
     let attempts = 0;
-    let consecutiveEmptyPolls = 0;
-    const maxEmptyPolls = 8; // Stop after 8 consecutive empty polls (increased for multiple messages)
 
     const poll = async () => {
       try {
@@ -183,14 +181,25 @@ export default function Home() {
             console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
             
             // Continue polling for more messages instead of stopping
-            // Reset both counters since we got messages, but keep polling
+            // Reset attempts since we got messages, but keep polling
             attempts = 0;
-            consecutiveEmptyPolls = 0;
-            setTimeout(poll, 2000); // Wait 2 seconds for potential additional messages (increased for multiple responses)
+            setTimeout(poll, 1500); // Wait 1.5 seconds for potential additional messages
             return;
           } else {
-            console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
-            consecutiveEmptyPolls++;
+            console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, checking webhook activity...`);
+            
+            // Check if n8n is still actively sending messages
+            const webhookCheck = await fetch(`${BACKEND_URL}/api/webhook-activity/${conversationId}`);
+            if (webhookCheck.ok) {
+              const webhookData = await webhookCheck.json();
+              console.log(`🔍 Webhook activity status:`, webhookData);
+              
+              if (!webhookData.isActive) {
+                console.log(`✅ n8n appears to be done sending messages - stopping polling`);
+                setIsLoading(false);
+                return;
+              }
+            }
           }
         } else {
           console.log(`❌ Backend polling request failed with status: ${botResponseRes.status}`);
@@ -199,7 +208,7 @@ export default function Home() {
         // No bot response available yet, try again
         attempts++;
         
-        // Stop polling if we've tried too many times OR if we've had too many consecutive empty polls
+        // Stop polling if we've tried too many times
         if (attempts >= maxAttempts) {
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
@@ -208,17 +217,12 @@ export default function Home() {
           };
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
-        } else if (consecutiveEmptyPolls >= maxEmptyPolls) {
-          // We've received some messages but no new ones for a while - stop polling
-          console.log(`✅ Stopping polling after ${consecutiveEmptyPolls} consecutive empty polls - assuming all messages received`);
-          setIsLoading(false);
         } else {
           setTimeout(poll, 1000);
         }
         
       } catch (error) {
         attempts++;
-        consecutiveEmptyPolls++;
         
         if (attempts >= maxAttempts) {
           const errorMessage = {
@@ -227,9 +231,6 @@ export default function Home() {
             isBot: true
           };
           setMessages(prev => [...prev, errorMessage]);
-          setIsLoading(false);
-        } else if (consecutiveEmptyPolls >= maxEmptyPolls) {
-          console.log(`✅ Stopping polling after ${consecutiveEmptyPolls} consecutive errors/empty polls`);
           setIsLoading(false);
         } else {
           setTimeout(poll, 1000);
