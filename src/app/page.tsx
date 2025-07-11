@@ -182,12 +182,13 @@ export default function Home() {
             setMessages(prev => [...prev, ...botMessages]);
             console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
             
-            // Continue polling for more messages instead of stopping
-            // Reset both counters since we got messages, but keep polling
-            attempts = 0;
-            consecutiveEmptyPolls = 0;
-            setTimeout(poll, 2000); // Wait 2 seconds for potential additional messages (increased for multiple responses)
+            // Stop polling since we received the complete set of messages from backend
+            setIsLoading(false);
+            console.log(`✅ All messages received and displayed - stopping polling`);
             return;
+          } else if (botData.message === 'Still collecting messages from n8n') {
+            console.log(`⏳ Backend still collecting messages from n8n (${botData.messagesReceived || 0} received so far)...`);
+            consecutiveEmptyPolls = 0; // Reset counter since backend is actively collecting
           } else {
             console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
             consecutiveEmptyPolls++;
