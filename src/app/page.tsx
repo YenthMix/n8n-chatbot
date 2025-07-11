@@ -20,19 +20,19 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
 
   // Ref for auto-scrolling to bottom of messages
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'end'
-      });
+      if (messagesContainerRef.current) {
+        const container = messagesContainerRef.current;
+        container.scrollTop = container.scrollHeight;
+      }
     };
     
     // Small delay to ensure DOM is updated before scrolling
-    setTimeout(scrollToBottom, 100);
+    setTimeout(scrollToBottom, 200);
   }, [messages, isLoading]); // Trigger on messages change or loading state change
 
   useEffect(() => {
@@ -301,7 +301,7 @@ export default function Home() {
         </div>
       </div>
       
-      <div className="chatbot-messages">
+      <div className="chatbot-messages" ref={messagesContainerRef}>
         {messages.map((message) => (
           <div 
             key={message.id} 
@@ -329,7 +329,6 @@ export default function Home() {
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
       
       <div className="chatbot-input">
