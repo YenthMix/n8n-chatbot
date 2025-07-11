@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
@@ -18,6 +18,22 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+
+  // Ref for auto-scrolling to bottom of messages
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    const scrollToBottom = () => {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end'
+      });
+    };
+    
+    // Small delay to ensure DOM is updated before scrolling
+    setTimeout(scrollToBottom, 100);
+  }, [messages, isLoading]); // Trigger on messages change or loading state change
 
   useEffect(() => {
     initializeChatAPI();
@@ -313,6 +329,7 @@ export default function Home() {
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
       
       <div className="chatbot-input">
