@@ -21,7 +21,7 @@ app.use(cors({
       origin.includes('vercel.app') || 
       origin.includes('localhost') ||
       origin.includes('127.0.0.1') ||
-      origin === 'https://n8n-chatbot-psi.vercel.app'
+      origin === 'https://n8n-chatbot-gamma.vercel.app'
     ) {
       return callback(null, true);
     }
