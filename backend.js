@@ -21,8 +21,8 @@ app.use(cors({
       origin.includes('vercel.app') || 
       origin.includes('localhost') ||
       origin.includes('127.0.0.1') ||
-      origin === 'https://n8n-chatbot-gamma.vercel.app' ||
-      origin === 'https://n8n-chatbot-git-main-yenths-projects.vercel.app'
+      origin === 'https://n8n-chatbot-psi.vercel.app' ||
+      origin === 'https://n8n-chatbot-r1rtgxuh2-yenths-projects.vercel.app'
     ) {
       return callback(null, true);
     }
@@ -382,7 +382,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           console.log(`📋 Final message order (sorted by timestamp):`);
           finalMessages.forEach((msg, index) => {
-            console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
+            const displayText = msg.text ? msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : '') : '[Image only]';
+            const imageInfo = msg.hasImage ? ' + IMAGE' : '';
+            console.log(`   Position ${index + 1}: "${displayText}"${imageInfo} (${msg.receivedAt})`);
           });
           
           // Update Map data for delivery
