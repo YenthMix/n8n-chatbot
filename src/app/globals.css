@@ -226,28 +226,6 @@ body {
   background: #ad1457;
 }
 
-/* Image styling in chat messages */
-.message-image {
-  margin-top: 8px;
-}
-
-.chat-image {
-  max-width: 100%;
-  max-height: 300px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease;
-  cursor: pointer;
-}
-
-.chat-image:hover {
-  transform: scale(1.02);
-}
-
-.message-text + .message-image {
-  margin-top: 8px;
-}
-
 /* Responsive design */
 @media (max-width: 600px) {
   .chatbot-container {
@@ -258,9 +236,5 @@ body {
   
   body {
     padding: 0;
-  }
-  
-  .chat-image {
-    max-height: 250px;
   }
 }
