@@ -261,7 +261,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
     if (body.body && body.body.data) {
       // N8N sends: { body: { data: { conversationId, payload: { text }, isBot } } }
       conversationId = body.body.data.conversationId;
-      botText = body.body.data.payload?.text || body.body.data.text;
+      botText = body.body.data.payload?.text || body.body.data.text || null;
       isBot = body.body.data.isBot;
       
       // Extract image data - check multiple possible locations
@@ -276,7 +276,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
     } else if (body.conversationId) {
       // Direct structure: { conversationId, payload: { text }, isBot }
       conversationId = body.conversationId;
-      botText = body.payload?.text || body.text;
+      botText = body.payload?.text || body.text || null;
       isBot = body.isBot;
       
       // Extract image data
@@ -288,9 +288,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
                   body.file;
       
       console.log('📍 Using body.conversationId pattern');
-    } else if (body.text) {
-      // Simple text structure
-      botText = body.text;
+    } else if (body.text || body.image || body.imageUrl || body.file) {
+      // Simple text structure or image-only
+      botText = body.text || null;
       isBot = body.isBot;
       
       // Extract image data
@@ -381,7 +381,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           console.log(`📋 Final message order (sorted by timestamp):`);
           finalMessages.forEach((msg, index) => {
-            console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
+            const displayText = msg.text || '[No text]';
+            const imageInfo = msg.hasImage ? ' + IMAGE' : '';
+            console.log(`   Position ${index + 1}: "${displayText.substring(0, 50)}${displayText.length > 50 ? '...' : ''}"${imageInfo} (${msg.receivedAt})`);
           });
           
           // Update Map data for delivery
