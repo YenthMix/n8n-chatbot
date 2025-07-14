@@ -262,7 +262,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
     if (body.body && body.body.data) {
       // N8N sends: { body: { data: { conversationId, payload: { text }, isBot } } }
       conversationId = body.body.data.conversationId;
-      botText = body.body.data.payload?.text || body.body.data.text || null;
+      botText = body.body.data.payload?.text || body.body.data.text;
       isBot = body.body.data.isBot;
       
       // Extract image data - check multiple possible locations
@@ -277,7 +277,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
     } else if (body.conversationId) {
       // Direct structure: { conversationId, payload: { text }, isBot }
       conversationId = body.conversationId;
-      botText = body.payload?.text || body.text || null;
+      botText = body.payload?.text || body.text;
       isBot = body.isBot;
       
       // Extract image data
@@ -289,9 +289,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
                   body.file;
       
       console.log('📍 Using body.conversationId pattern');
-    } else if (body.text || body.image || body.imageUrl || body.file) {
-      // Simple text structure or image-only
-      botText = body.text || null;
+    } else if (body.text) {
+      // Simple text structure
+      botText = body.text;
       isBot = body.isBot;
       
       // Extract image data
@@ -382,9 +382,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           console.log(`📋 Final message order (sorted by timestamp):`);
           finalMessages.forEach((msg, index) => {
-            const displayText = msg.text || '[No text]';
-            const imageInfo = msg.hasImage ? ' + IMAGE' : '';
-            console.log(`   Position ${index + 1}: "${displayText.substring(0, 50)}${displayText.length > 50 ? '...' : ''}"${imageInfo} (${msg.receivedAt})`);
+            console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
           });
           
           // Update Map data for delivery
@@ -397,7 +395,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
               deliveryTimeoutId: null
             };
             botMessages.set(conversationId, conversationData);
-            console.log(`📦 Created new botMessages Map entry for: ${conversationId}`);
           }
           
           // Set all messages as ready for delivery
@@ -406,13 +403,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
           conversationData.deliveryTimeoutId = null;
           
           console.log(`✅ All ${finalMessages.length} messages ready for delivery in correct timestamp order`);
-          console.log(`📊 botMessages Map now contains: ${botMessages.size} conversations`);
-          console.log(`📊 Current conversation has: ${conversationData.messages.length} messages ready for frontend`);
-          
-          // Debug: Log what's in the botMessages Map
-          finalMessages.forEach((msg, idx) => {
-            console.log(`   Ready Message ${idx + 1}: text="${msg.text || '[null]'}", hasImage=${msg.hasImage}, image="${msg.image ? 'YES' : 'NO'}"`);
-          });
           
           // Clean up the tracked user message since we got bot response(s)
           userMessages.delete(conversationId);
@@ -551,9 +541,6 @@ app.post('/api/botpress-webhook', async (req, res) => {
 app.get('/api/bot-response/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const pollTimestamp = new Date().toISOString();
-    console.log(`🔍 FRONTEND POLLING at ${pollTimestamp} for conversation: ${conversationId}`);
-    
     let conversationData = botMessages.get(conversationId);
     
     // FALLBACK: Use global storage if Map data is missing
@@ -585,8 +572,7 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
           undeliveredMessages.forEach((msg, idx) => {
             const displayText = msg.text || '[No text]';
             const imageInfo = msg.hasImage ? ' + IMAGE' : '';
-            const imageUrl = msg.image ? ` [URL: ${msg.image.substring(0, 50)}...]` : '';
-            console.log(`   Message ${idx + 1}: "${displayText.substring(0, 100)}${displayText.length > 100 ? '...' : ''}"${imageInfo}${imageUrl} (${msg.receivedAt})`);
+            console.log(`   Message ${idx + 1}: "${displayText.substring(0, 100)}${displayText.length > 100 ? '...' : ''}"${imageInfo} (${msg.receivedAt})`);
           });
           
           // Mark messages as delivered
@@ -600,23 +586,9 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       console.log(`   User messages tracked: ${userMessages.size}`);
       console.log(`🏁 Ready for next message cycle`);
       
-      const formattedMessages = undeliveredMessages.map(msg => ({
-        id: msg.id,
-        text: msg.text,
-        receivedAt: msg.receivedAt,
-        timestamp: msg.timestamp,
-        image: msg.image,
-        hasImage: msg.hasImage
-      }));
-      
-      console.log(`📤 SENDING TO FRONTEND: ${formattedMessages.length} messages`);
-      formattedMessages.forEach((msg, idx) => {
-        console.log(`   Frontend Message ${idx + 1}: text="${msg.text || '[null]'}", hasImage=${msg.hasImage}, image="${msg.image ? msg.image.substring(0, 50) + '...' : '[null]'}"`);
-      });
-      
       res.json({ 
         success: true, 
-        messages: formattedMessages
+            messages: undeliveredMessages
       });
     } else {
           console.log(`❌ ALL MESSAGES ALREADY DELIVERED for conversation: ${conversationId}`);
@@ -639,19 +611,10 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     } else {
       console.log(`❌ NO BOT MESSAGES FOUND for conversation: ${conversationId}`);
       console.log(`📊 Current state: ${botMessages.size} conversation(s) with messages`);
-      
-      // Debug: Show what conversations we DO have
-      if (botMessages.size > 0) {
-        console.log(`🔍 Available conversations:`);
-        for (const [convId, convData] of botMessages.entries()) {
-          console.log(`   ${convId}: ${convData.messages.length} messages, allReceived: ${convData.allMessagesReceived}`);
-        }
-      }
-      
       res.json({ 
         success: false, 
         message: 'No bot messages available' 
-      });
+        });
     }
   } catch (error) {
     console.error('❌ Error getting bot messages:', error);
