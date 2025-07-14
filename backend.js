@@ -252,31 +252,37 @@ app.post('/api/botpress-webhook', async (req, res) => {
       }
     
     const body = req.body;
-    let conversationId, botText, isBot;
+    let conversationId, botText, isBot, botImage;
     
     // Try multiple extraction patterns
     if (body.body && body.body.data) {
-      // N8N sends: { body: { data: { conversationId, payload: { text }, isBot } } }
+      // N8N sends: { body: { data: { conversationId, payload: { text, image }, isBot } } }
       conversationId = body.body.data.conversationId;
       botText = body.body.data.payload?.text || body.body.data.text;
+      botImage = body.body.data.payload?.image || body.body.data.image;
       isBot = body.body.data.isBot;
       console.log('📍 Using body.body.data pattern');
     } else if (body.conversationId) {
-      // Direct structure: { conversationId, payload: { text }, isBot }
+      // Direct structure: { conversationId, payload: { text, image }, isBot }
       conversationId = body.conversationId;
       botText = body.payload?.text || body.text;
+      botImage = body.payload?.image || body.image;
       isBot = body.isBot;
       console.log('📍 Using body.conversationId pattern');
-    } else if (body.text) {
-      // Simple text structure
+    } else if (body.text || body.image) {
+      // Simple text/image structure
       botText = body.text;
+      botImage = body.image;
       isBot = body.isBot;
-      console.log('📍 Using body.text pattern');
+      console.log('📍 Using body.text/image pattern');
     }
     
-    console.log(`🔍 Extracted: conversationId="${conversationId}", text="${botText}", isBot="${isBot}"`);
+    console.log(`🔍 Extracted: conversationId="${conversationId}", text="${botText}", image="${botImage ? 'present' : 'none'}", isBot="${isBot}"`);
     console.log(`🔍 Type of isBot: ${typeof isBot}`);
     console.log(`🔍 Raw isBot value: ${JSON.stringify(isBot)}`);
+    if (botImage) {
+      console.log(`🖼️ Image data type: ${typeof botImage}, length: ${typeof botImage === 'string' ? botImage.length : 'N/A'}`);
+    }
     
     // Check if this matches a tracked user message
     const trackedUserMessage = userMessages.get(conversationId);
@@ -297,8 +303,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
       const botMessageTimestamp = new Date().toISOString();
       console.log(`🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) at ${botMessageTimestamp} - will store and display separately`);
       
-      if (conversationId && botText && !botText.includes('{{ $json')) {
-        console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${botText}"`);
+      if (conversationId && (botText || botImage) && (!botText || !botText.includes('{{ $json'))) {
+        console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${botText || '[IMAGE]'}"`);
         
         // SIMPLE FIX: Use both Map and global object to prevent race conditions
         if (!globalMessages[conversationId]) {
@@ -309,7 +315,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
         // Store message in global storage immediately
         const messageTimestamp = Date.now();
         const newMessage = {
-          text: botText,
+          text: botText || null,
+          image: botImage || null,
           timestamp: messageTimestamp,
           receivedAt: botMessageTimestamp,
           id: `bot-msg-${messageTimestamp}-${Math.random().toString(36).substr(2, 6)}`,
@@ -317,7 +324,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
         };
         
                 globalMessages[conversationId].push(newMessage);
-        console.log(`📝 STORED MESSAGE ${globalMessages[conversationId].length}: "${botText}"`);
+        console.log(`📝 STORED MESSAGE ${globalMessages[conversationId].length}: "${botText || '[IMAGE]'}" ${botImage ? '[+IMAGE]' : ''}`);
         console.log(`📊 Total messages in global storage: ${globalMessages[conversationId].length}`);
         
         // CRITICAL FIX: Use SHARED timeout for the conversation, not per-message timeout
@@ -346,7 +353,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           console.log(`📋 Final message order (sorted by timestamp):`);
           finalMessages.forEach((msg, index) => {
-            console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
+            const displayText = msg.text ? msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : '') : '[IMAGE]';
+            console.log(`   Position ${index + 1}: "${displayText}" ${msg.image ? '[+IMAGE]' : ''} (${msg.receivedAt})`);
           });
           
           // Update Map data for delivery
@@ -396,8 +404,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
         );
         
       if (!trackedUserMessage || (trackedUserMessage && botText !== trackedUserMessage.text)) {
-        if (looksLikeBotResponse && conversationId && botText && !botText.includes('{{ $json')) {
-          console.log(`💾 FALLBACK: STORING BOT MESSAGE: "${botText}"`);
+        if ((looksLikeBotResponse || botImage) && conversationId && (botText || botImage) && (!botText || !botText.includes('{{ $json'))) {
+          console.log(`💾 FALLBACK: STORING BOT MESSAGE: "${botText || '[IMAGE]'}"`);
           
           // Get or create conversation data
           let conversationData = botMessages.get(conversationId);
@@ -414,7 +422,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Store as individual message
           const messageTimestamp = Date.now();
           conversationData.messages.push({
-            text: botText,
+            text: botText || null,
+            image: botImage || null,
             timestamp: messageTimestamp,
             receivedAt: new Date().toISOString(),
             id: `bot-fallback-${messageTimestamp}`,
@@ -530,7 +539,8 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
           
           // Log each message being delivered
           undeliveredMessages.forEach((msg, idx) => {
-            console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}" (${msg.receivedAt})`);
+            const displayText = msg.text ? msg.text.substring(0, 100) + (msg.text.length > 100 ? '...' : '') : '[IMAGE]';
+            console.log(`   Message ${idx + 1}: "${displayText}" ${msg.image ? '[+IMAGE]' : ''} (${msg.receivedAt})`);
           });
           
           // Mark messages as delivered
@@ -634,7 +644,9 @@ app.get('/api/debug/stored-responses', async (req, res) => {
       allMessagesReceived: value.allMessagesReceived,
       hasDeliveryTimeout: !!value.deliveryTimeoutId,
       messages: value.messages.map(msg => ({ 
-        text: msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : ''),
+        text: msg.text ? msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : '') : null,
+        hasImage: !!msg.image,
+        imageType: msg.image ? typeof msg.image : null,
         timestamp: msg.timestamp,
         receivedAt: msg.receivedAt,
         id: msg.id,

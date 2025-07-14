@@ -5,8 +5,17 @@ import { useState, useEffect } from 'react';
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
+interface Message {
+  id: string;
+  text?: string;
+  image?: string;
+  isBot: boolean;
+  receivedAt?: string;
+  timestamp?: number;
+}
+
 export default function Home() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
@@ -174,6 +183,7 @@ export default function Home() {
             const botMessages = botData.messages.map((msg: any) => ({
               id: msg.id,
               text: msg.text,
+              image: msg.image,
               isBot: true,
               receivedAt: msg.receivedAt,
               timestamp: msg.timestamp
@@ -288,7 +298,19 @@ export default function Home() {
             className={`message ${message.isBot ? 'bot-message' : 'user-message'}`}
           >
             <div className="message-content">
-              {message.text}
+              {message.text && <div className="message-text">{message.text}</div>}
+              {message.image && (
+                <div className="message-image">
+                  <img 
+                    src={message.image} 
+                    alt="Chat image" 
+                    onError={(e) => {
+                      console.error('Failed to load image:', message.image);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}
