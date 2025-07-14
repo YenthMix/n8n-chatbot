@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
@@ -25,10 +25,20 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userKey, setUserKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     initializeChatAPI();
   }, []);
+
+  // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // Removed old polling mechanism - now using direct bot response endpoint
 
@@ -328,6 +338,7 @@ export default function Home() {
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
       
       <div className="chatbot-input">
