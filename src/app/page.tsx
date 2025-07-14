@@ -7,7 +7,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
   const [messages, setMessages] = useState([
-    { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
+    { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true, imageUrl: undefined }
   ]);
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
   const [inputValue, setInputValue] = useState('');
@@ -71,7 +71,8 @@ export default function Home() {
       const errorMessage = {
         id: `error-${Date.now()}`,
         text: "Failed to connect to Botpress. Please make sure the backend server is running with 'npm run backend'.",
-        isBot: true
+        isBot: true,
+        imageUrl: undefined
       };
       setMessages(prev => [...prev, errorMessage]);
     }
@@ -174,6 +175,7 @@ export default function Home() {
             const botMessages = botData.messages.map((msg: any) => ({
               id: msg.id,
               text: msg.text,
+              imageUrl: msg.imageUrl,
               isBot: true,
               receivedAt: msg.receivedAt,
               timestamp: msg.timestamp
@@ -205,7 +207,8 @@ export default function Home() {
           const timeoutMessage = {
             id: `timeout-${Date.now()}`,
             text: "I'm taking longer than usual to respond. Please try sending your message again.",
-            isBot: true
+            isBot: true,
+            imageUrl: undefined
           };
           setMessages(prev => [...prev, timeoutMessage]);
           setIsLoading(false);
@@ -225,7 +228,8 @@ export default function Home() {
           const errorMessage = {
             id: `poll-error-${Date.now()}`,
             text: "I'm having trouble connecting right now. Please try again.",
-            isBot: true
+            isBot: true,
+            imageUrl: undefined
           };
           setMessages(prev => [...prev, errorMessage]);
           setIsLoading(false);
@@ -250,7 +254,7 @@ export default function Home() {
     setInputValue('');
     setIsLoading(true);
     
-    const userMessageObj = { id: `user-${Date.now()}`, text: userMessage, isBot: false };
+    const userMessageObj = { id: `user-${Date.now()}`, text: userMessage, isBot: false, imageUrl: undefined };
     setMessages(prev => [...prev, userMessageObj]);
     
     try {
@@ -259,7 +263,8 @@ export default function Home() {
       const errorMessage = { 
         id: `error-${Date.now()}`, 
         text: "Sorry, I'm having trouble connecting to the bot right now. Please try again later.", 
-        isBot: true 
+        isBot: true,
+        imageUrl: undefined
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
@@ -288,7 +293,24 @@ export default function Home() {
             className={`message ${message.isBot ? 'bot-message' : 'user-message'}`}
           >
             <div className="message-content">
-              {message.text}
+              {message.text && (
+                <div className="message-text">
+                  {message.text}
+                </div>
+              )}
+              {message.imageUrl && (
+                <div className="message-image">
+                  <img 
+                    src={message.imageUrl} 
+                    alt="Shared image" 
+                    className="chat-image"
+                    onError={(e) => {
+                      console.error('Failed to load image:', message.imageUrl);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}
