@@ -259,22 +259,22 @@ app.post('/api/botpress-webhook', async (req, res) => {
       // N8N sends: { body: { data: { conversationId, payload: { text, image }, isBot } } }
       conversationId = body.body.data.conversationId;
       botText = body.body.data.payload?.text || body.body.data.text;
-      botImage = body.body.data.payload?.image || body.body.data.image;
+      botImage = body.body.data.payload?.image || body.body.data.payload?.imageUrl || body.body.data.image || body.body.data.imageUrl;
       isBot = body.body.data.isBot;
       console.log('📍 Using body.body.data pattern');
     } else if (body.conversationId) {
       // Direct structure: { conversationId, payload: { text, image }, isBot }
       conversationId = body.conversationId;
       botText = body.payload?.text || body.text;
-      botImage = body.payload?.image || body.image;
+      botImage = body.payload?.image || body.payload?.imageUrl || body.image || body.imageUrl;
       isBot = body.isBot;
       console.log('📍 Using body.conversationId pattern');
-    } else if (body.text || body.image) {
+    } else if (body.text || body.image || body.imageUrl) {
       // Simple text/image structure
       botText = body.text;
-      botImage = body.image;
+      botImage = body.image || body.imageUrl;
       isBot = body.isBot;
-      console.log('📍 Using body.text/image pattern');
+      console.log('📍 Using body.text/image/imageUrl pattern');
     }
     
     console.log(`🔍 Extracted: conversationId="${conversationId}", text="${botText}", image="${botImage ? 'present' : 'none'}", isBot="${isBot}"`);
