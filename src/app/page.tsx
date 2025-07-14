@@ -29,6 +29,7 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+    console.log(`🔧 FRONTEND CONFIG: N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}, BACKEND_URL=${BACKEND_URL}`);
     initializeChatAPI();
   }, []);
 
@@ -150,6 +151,8 @@ export default function Home() {
   };
 
   const pollForBotResponse = async () => {
+    console.log(`🚀 FRONTEND: Starting pollForBotResponse, conversationId: ${conversationId}, BACKEND_URL: ${BACKEND_URL}`);
+    
     if (!conversationId) {
       console.error('Cannot poll - missing conversationId');
       setIsLoading(false);
@@ -165,12 +168,17 @@ export default function Home() {
       try {
         // Check for bot responses from N8N backend only
         const pollTimestamp = new Date().toISOString();
-        console.log(`🔍 Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp} for conversation:`, conversationId);
-        const botResponseRes = await fetch(`${BACKEND_URL}/api/bot-response/${conversationId}`);
+        const pollUrl = `${BACKEND_URL}/api/bot-response/${conversationId}`;
+        console.log(`🔍 FRONTEND: Polling attempt ${attempts + 1}/${maxAttempts} at ${pollTimestamp}`);
+        console.log(`🔍 FRONTEND: Polling URL: ${pollUrl}`);
+        console.log(`🔍 FRONTEND: For conversation: ${conversationId}`);
+        
+        const botResponseRes = await fetch(pollUrl);
         
         if (botResponseRes.ok) {
           const botData = await botResponseRes.json();
-          console.log(`📡 Backend polling response at ${pollTimestamp}:`, botData);
+          console.log(`📡 FRONTEND: Backend polling response at ${pollTimestamp}:`, botData);
+          console.log(`📡 FRONTEND: Response details - success: ${botData.success}, messages: ${botData.messages?.length || 0}`);
           
           if (botData.success && botData.messages) {
             const receivedTimestamp = new Date().toISOString();
@@ -178,7 +186,7 @@ export default function Home() {
             
             // Log each message received
             botData.messages.forEach((msg: any, idx: number) => {
-              console.log(`   Message ${idx + 1}: "${msg.text}" (received: ${msg.receivedAt})`);
+              console.log(`   FRONTEND Message ${idx + 1}: text="${msg.text}", hasImage=${msg.hasImage}, image="${msg.image ? 'YES' : 'NO'}" (received: ${msg.receivedAt})`);
             });
             
             // Add each message separately to the chat in timestamp order
@@ -194,7 +202,12 @@ export default function Home() {
             }));
             
             setMessages(prev => [...prev, ...botMessages]);
-            console.log(`💬 ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
+            console.log(`💬 FRONTEND: ${botMessages.length} bot messages added to chat interface at ${receivedTimestamp}`);
+            
+            // Debug: Log what was actually added to state
+            botMessages.forEach((msg: Message, idx: number) => {
+              console.log(`   FRONTEND Added to State ${idx + 1}: text="${msg.text}", hasImage=${msg.hasImage}, image="${msg.image ? 'YES' : 'NO'}"`);
+            });
             
             // Stop polling since we received the complete set of messages from backend
             setIsLoading(false);
