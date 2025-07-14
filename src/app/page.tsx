@@ -37,8 +37,12 @@ export default function Home() {
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // Only scroll if we're not currently loading (to avoid interfering with polling)
+    if (!isLoading) {
+      const timer = setTimeout(scrollToBottom, 100); // Small delay to ensure DOM is updated
+      return () => clearTimeout(timer);
+    }
+  }, [messages, isLoading]);
 
   // Removed old polling mechanism - now using direct bot response endpoint
 
