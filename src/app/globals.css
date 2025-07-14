@@ -71,6 +71,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  scroll-behavior: smooth;
 }
 
 .message {

@@ -30,6 +30,14 @@ export default function Home() {
     initializeChatAPI();
   }, []);
 
+  // Auto-scroll to bottom when new messages are added
+  useEffect(() => {
+    const messagesContainer = document.querySelector('.chatbot-messages');
+    if (messagesContainer) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  }, [messages]);
+
   // Removed old polling mechanism - now using direct bot response endpoint
 
   const initializeChatAPI = async () => {
