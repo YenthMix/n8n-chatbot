@@ -21,7 +21,7 @@ app.use(cors({
       origin.includes('vercel.app') || 
       origin.includes('localhost') ||
       origin.includes('127.0.0.1') ||
-      origin === 'https://n8n-chatbot-psi.vercel.app' ||
+      origin === 'https://n8n-chatbot-gamma.vercel.app' ||
       origin === 'https://n8n-chatbot-r1rtgxuh2-yenths-projects.vercel.app'
     ) {
       return callback(null, true);
@@ -198,14 +198,11 @@ app.get('/api/messages', async (req, res) => {
       const formattedResponse = {
         messages: conversationData.messages.map(msg => ({
           id: msg.id,
-          type: msg.hasImage ? 'image' : 'text',
-          payload: msg.hasImage ? {
-            text: msg.text || '',
-            image: msg.image
-          } : {
+            type: 'text',
+            payload: {
             text: msg.text
-          },
-          userId: 'bot',
+            },
+            userId: 'bot',
           createdAt: new Date(msg.timestamp).toISOString()
         }))
       };
@@ -256,7 +253,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
       }
     
     const body = req.body;
-    let conversationId, botText, isBot, imageData;
+    let conversationId, botText, isBot;
     
     // Try multiple extraction patterns
     if (body.body && body.body.data) {
@@ -264,50 +261,23 @@ app.post('/api/botpress-webhook', async (req, res) => {
       conversationId = body.body.data.conversationId;
       botText = body.body.data.payload?.text || body.body.data.text;
       isBot = body.body.data.isBot;
-      
-      // Extract image data - check multiple possible locations
-      imageData = body.body.data.payload?.image || 
-                  body.body.data.image || 
-                  body.body.data.payload?.imageUrl ||
-                  body.body.data.imageUrl ||
-                  body.body.data.payload?.file ||
-                  body.body.data.file;
-      
       console.log('📍 Using body.body.data pattern');
     } else if (body.conversationId) {
       // Direct structure: { conversationId, payload: { text }, isBot }
       conversationId = body.conversationId;
       botText = body.payload?.text || body.text;
       isBot = body.isBot;
-      
-      // Extract image data
-      imageData = body.payload?.image || 
-                  body.image || 
-                  body.payload?.imageUrl ||
-                  body.imageUrl ||
-                  body.payload?.file ||
-                  body.file;
-      
       console.log('📍 Using body.conversationId pattern');
     } else if (body.text) {
       // Simple text structure
       botText = body.text;
       isBot = body.isBot;
-      
-      // Extract image data
-      imageData = body.image || body.imageUrl || body.file;
-      
       console.log('📍 Using body.text pattern');
     }
     
     console.log(`🔍 Extracted: conversationId="${conversationId}", text="${botText}", isBot="${isBot}"`);
     console.log(`🔍 Type of isBot: ${typeof isBot}`);
     console.log(`🔍 Raw isBot value: ${JSON.stringify(isBot)}`);
-    
-    // Log image detection
-    if (imageData) {
-      console.log(`🖼️ IMAGE DETECTED: ${typeof imageData === 'string' ? imageData.substring(0, 100) + '...' : JSON.stringify(imageData).substring(0, 100) + '...'}`);
-    }
     
     // Check if this matches a tracked user message
     const trackedUserMessage = userMessages.get(conversationId);
@@ -328,10 +298,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
       const botMessageTimestamp = new Date().toISOString();
       console.log(`🤖 IDENTIFIED AS BOT MESSAGE (isBot: true) at ${botMessageTimestamp} - will store and display separately`);
       
-      // Allow messages with either text or image (or both)
-      if (conversationId && (botText || imageData) && (!botText || !botText.includes('{{ $json'))) {
-        const displayText = botText || '[Image]';
-        console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${displayText}"${imageData ? ' + IMAGE' : ''}`);
+      if (conversationId && botText && !botText.includes('{{ $json')) {
+        console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${botText}"`);
         
         // SIMPLE FIX: Use both Map and global object to prevent race conditions
         if (!globalMessages[conversationId]) {
@@ -346,10 +314,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
           timestamp: messageTimestamp,
           receivedAt: botMessageTimestamp,
           id: `bot-msg-${messageTimestamp}-${Math.random().toString(36).substr(2, 6)}`,
-          delivered: false,
-          // Add image support
-          image: imageData || null,
-          hasImage: !!imageData
+          delivered: false
         };
         
                 globalMessages[conversationId].push(newMessage);
@@ -382,9 +347,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
           
           console.log(`📋 Final message order (sorted by timestamp):`);
           finalMessages.forEach((msg, index) => {
-            const displayText = msg.text ? msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : '') : '[Image only]';
-            const imageInfo = msg.hasImage ? ' + IMAGE' : '';
-            console.log(`   Position ${index + 1}: "${displayText}"${imageInfo} (${msg.receivedAt})`);
+            console.log(`   Position ${index + 1}: "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}" (${msg.receivedAt})`);
           });
           
           // Update Map data for delivery
@@ -434,9 +397,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
         );
         
       if (!trackedUserMessage || (trackedUserMessage && botText !== trackedUserMessage.text)) {
-        if (looksLikeBotResponse && conversationId && (botText || imageData) && (!botText || !botText.includes('{{ $json'))) {
-          const displayText = botText || '[Image]';
-          console.log(`💾 FALLBACK: STORING BOT MESSAGE: "${displayText}"${imageData ? ' + IMAGE' : ''}`);
+        if (looksLikeBotResponse && conversationId && botText && !botText.includes('{{ $json')) {
+          console.log(`💾 FALLBACK: STORING BOT MESSAGE: "${botText}"`);
           
           // Get or create conversation data
           let conversationData = botMessages.get(conversationId);
@@ -457,10 +419,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
             timestamp: messageTimestamp,
             receivedAt: new Date().toISOString(),
             id: `bot-fallback-${messageTimestamp}`,
-            delivered: false,
-            // Add image support to fallback as well
-            image: imageData || null,
-            hasImage: !!imageData
+            delivered: false
           });
           
           // Sort messages by timestamp
@@ -572,9 +531,7 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
           
           // Log each message being delivered
           undeliveredMessages.forEach((msg, idx) => {
-            const displayText = msg.text || '[No text]';
-            const imageInfo = msg.hasImage ? ' + IMAGE' : '';
-            console.log(`   Message ${idx + 1}: "${displayText.substring(0, 100)}${displayText.length > 100 ? '...' : ''}"${imageInfo} (${msg.receivedAt})`);
+            console.log(`   Message ${idx + 1}: "${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}" (${msg.receivedAt})`);
           });
           
           // Mark messages as delivered
@@ -678,13 +635,11 @@ app.get('/api/debug/stored-responses', async (req, res) => {
       allMessagesReceived: value.allMessagesReceived,
       hasDeliveryTimeout: !!value.deliveryTimeoutId,
       messages: value.messages.map(msg => ({ 
-        text: msg.text ? msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : '') : '[No text]',
+        text: msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : ''),
         timestamp: msg.timestamp,
         receivedAt: msg.receivedAt,
         id: msg.id,
-        delivered: msg.delivered,
-        hasImage: msg.hasImage,
-        imageType: msg.image ? (typeof msg.image === 'string' ? 'string' : 'object') : null
+        delivered: msg.delivered
       }))
     };
   }

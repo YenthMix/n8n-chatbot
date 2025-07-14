@@ -1,23 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-// Define message interface with image support
-interface Message {
-  id: string;
-  text: string;
-  isBot: boolean;
-  receivedAt?: string;
-  timestamp?: number;
-  image?: string | null;
-  hasImage?: boolean;
-}
-
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
   const [displayedMessageIds, setDisplayedMessageIds] = useState(new Set(['welcome-1']));
@@ -187,10 +176,7 @@ export default function Home() {
               text: msg.text,
               isBot: true,
               receivedAt: msg.receivedAt,
-              timestamp: msg.timestamp,
-              // Add image support
-              image: msg.image || null,
-              hasImage: msg.hasImage || false
+              timestamp: msg.timestamp
             }));
             
             setMessages(prev => [...prev, ...botMessages]);
@@ -302,29 +288,7 @@ export default function Home() {
             className={`message ${message.isBot ? 'bot-message' : 'user-message'}`}
           >
             <div className="message-content">
-              {message.text && (
-                <div className="message-text">
-                  {message.text}
-                </div>
-              )}
-              {message.hasImage && message.image && (
-                <div className="message-image">
-                  <img 
-                    src={message.image} 
-                    alt="Image from bot" 
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: '300px',
-                      borderRadius: '8px',
-                      marginTop: message.text ? '8px' : '0'
-                    }}
-                    onError={(e) => {
-                      console.log('Image failed to load:', message.image);
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
+              {message.text}
             </div>
           </div>
         ))}
