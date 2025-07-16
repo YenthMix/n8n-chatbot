@@ -36,17 +36,13 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Track previous message count to detect when new messages are actually added
-  const [prevMessageCount, setPrevMessageCount] = useState(1); // Start with 1 (welcome message)
-
   useEffect(() => {
-    // Only scroll when messages are actually added to the chat AND we're not loading
-    if (messages.length > prevMessageCount && !isLoading) {
-      const timer = setTimeout(scrollToBottom, 200); // Scroll after messages are rendered
-      setPrevMessageCount(messages.length);
+    // Only scroll when loading stops (after all messages are collected)
+    if (!isLoading && messages.length > 0) {
+      const timer = setTimeout(scrollToBottom, 200); // Delay to ensure all messages are rendered
       return () => clearTimeout(timer);
     }
-  }, [messages.length, isLoading, prevMessageCount]);
+  }, [isLoading]); // Only trigger when loading state changes
 
   // Removed old polling mechanism - now using direct bot response endpoint
 
