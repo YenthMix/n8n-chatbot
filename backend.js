@@ -728,6 +728,32 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       throw new Error('No file ID in Botpress response');
     }
 
+    // Step 3: Add file to knowledge base
+    console.log(`📚 Adding file to knowledge base...`);
+    const knowledgeBaseResponse = await fetch('https://api.botpress.cloud/v1/knowledge_bases/kb-bfdcb1988f/documents', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
+        'Content-Type': 'application/json',
+        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155'
+      },
+      body: JSON.stringify({
+        name: req.file.originalname, // Uses actual filename (e.g., "Text Test.txt", "document.pdf", etc.)
+        type: 'file',
+        fileId: botpressData.file.id,
+        workspaceId: 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET'
+      })
+    });
+
+    if (!knowledgeBaseResponse.ok) {
+      const kbErrorText = await knowledgeBaseResponse.text();
+      console.error(`❌ Knowledge base error: ${knowledgeBaseResponse.status} - ${kbErrorText}`);
+      throw new Error(`Knowledge base error: ${knowledgeBaseResponse.status}`);
+    }
+
+    const kbData = await knowledgeBaseResponse.json();
+    console.log(`✅ File added to knowledge base successfully! Document ID: ${kbData.id || 'N/A'}`);
+
     // Clean up temporary file
     fs.unlinkSync(filePath);
     console.log(`🧹 Temporary file cleaned up: ${filePath}`);
@@ -736,6 +762,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       success: true, 
       message: 'File uploaded to knowledge base successfully',
       fileId: botpressData.file.id,
+      documentId: kbData.id,
       fileName: req.file.originalname
     });
 
