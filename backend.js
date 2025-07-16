@@ -62,6 +62,15 @@ const BOTPRESS_WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID;
 const BOTPRESS_BEARER_TOKEN = process.env.BOTPRESS_BEARER_TOKEN;
 const BOTPRESS_FILES_API_URL = process.env.BOTPRESS_FILES_API_URL;
 
+// Debug environment variables (without exposing sensitive data)
+console.log('🔧 Environment Variables Debug:');
+console.log(`   BOTPRESS_BOT_ID: ${BOTPRESS_BOT_ID ? 'SET' : 'MISSING'}`);
+console.log(`   BOTPRESS_WORKSPACE_ID: ${BOTPRESS_WORKSPACE_ID ? 'SET' : 'MISSING'}`);
+console.log(`   BOTPRESS_BEARER_TOKEN: ${BOTPRESS_BEARER_TOKEN ? 'SET' : 'MISSING'}`);
+console.log(`   BOTPRESS_FILES_API_URL: ${BOTPRESS_FILES_API_URL ? 'SET' : 'MISSING'}`);
+console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`   All env vars:`, Object.keys(process.env).filter(key => key.includes('BOTPRESS')));
+
 
 
 // Store bot messages separately by timestamp (in production, use Redis or database)
@@ -91,6 +100,15 @@ app.post('/api/upload-file', async (req, res) => {
     console.log(`🔑 Using botId: ${BOTPRESS_BOT_ID}, workspaceId: ${BOTPRESS_WORKSPACE_ID}`);
     console.log(`🌐 Upload URL: ${BOTPRESS_FILES_API_URL}`);
     console.log(`📄 Content length: ${content.length} characters`);
+    
+    // Check if environment variables are properly loaded
+    if (!BOTPRESS_BOT_ID || !BOTPRESS_WORKSPACE_ID || !BOTPRESS_BEARER_TOKEN || !BOTPRESS_FILES_API_URL) {
+      console.error('❌ Environment variables not properly loaded!');
+      return res.status(500).json({ 
+        error: 'Server configuration error', 
+        message: 'Botpress environment variables are missing. Please check your deployment configuration.' 
+      });
+    }
     
     const requestBody = {
       name: name,
