@@ -300,6 +300,11 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(233, 30, 99, 0.3);
 }
 
 .back-button:hover {
