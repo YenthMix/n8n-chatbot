@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
@@ -28,6 +29,9 @@ export default function Home() {
   
   // Ref for auto-scrolling to bottom
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Router for navigation
+  const router = useRouter();
 
   useEffect(() => {
     initializeChatAPI();
@@ -311,6 +315,15 @@ export default function Home() {
           {isConnected ? '🟢 Connected to Botpress' : '🟡 Connecting...'}
         </div>
       </div>
+      
+      {/* Navigation button to documents page */}
+      <button 
+        className="nav-button"
+        onClick={() => router.push('/documents')}
+        title="Manage Documents"
+      >
+        📄
+      </button>
       
       <div className="chatbot-messages">
         {messages.map((message) => (
