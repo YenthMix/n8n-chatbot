@@ -198,16 +198,26 @@ app.post('/api/upload-file', async (req, res) => {
   }
 });
 
-// List uploaded files from Botpress
+// List uploaded files from Botpress (try both Files API and Knowledge Base API)
 app.get('/api/files', async (req, res) => {
   try {
     console.log('📂 Fetching files from Botpress...');
     console.log(`🔑 Using botId: ${BOTPRESS_BOT_ID}, workspaceId: ${BOTPRESS_WORKSPACE_ID}`);
     
-    const url = `${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}&workspaceId=${BOTPRESS_WORKSPACE_ID}`;
-    console.log(`🌐 Request URL: ${url}`);
+    // Check if environment variables are properly loaded
+    if (!BOTPRESS_BOT_ID || !BOTPRESS_WORKSPACE_ID || !BOTPRESS_BEARER_TOKEN) {
+      console.error('❌ Environment variables not properly loaded!');
+      return res.status(500).json({ 
+        error: 'Server configuration error', 
+        message: 'Botpress environment variables are missing.' 
+      });
+    }
     
-    const response = await fetch(url, {
+    // Try Files API first
+    const filesApiUrl = `${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}&workspaceId=${BOTPRESS_WORKSPACE_ID}`;
+    console.log(`🌐 Files API URL: ${filesApiUrl}`);
+    
+    const filesApiResponse = await fetch(filesApiUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
@@ -217,16 +227,63 @@ app.get('/api/files', async (req, res) => {
       }
     });
     
-    const data = await response.json();
-    console.log('📋 Raw Botpress response:', JSON.stringify(data, null, 2));
-    
-    if (!response.ok) {
-      console.error('❌ Failed to fetch files from Botpress:', data);
-      return res.status(response.status).json({ error: 'Failed to fetch files', details: data });
+    if (filesApiResponse.ok) {
+      const filesData = await filesApiResponse.json();
+      console.log('📋 Files API response:', JSON.stringify(filesData, null, 2));
+      console.log(`✅ Retrieved ${filesData.files ? filesData.files.length : 0} files via Files API`);
+      return res.json({ ...filesData, method: 'files-api' });
     }
     
-    console.log(`✅ Retrieved ${data.files ? data.files.length : 0} files from Botpress`);
-    res.json(data);
+    console.log(`❌ Files API failed (${filesApiResponse.status}), trying Knowledge Base API...`);
+    
+    // Try Knowledge Base API as fallback
+    try {
+      const kbApiUrl = `https://api.botpress.cloud/v1/knowledge-bases?botId=${BOTPRESS_BOT_ID}&workspaceId=${BOTPRESS_WORKSPACE_ID}`;
+      console.log(`🌐 Knowledge Base API URL: ${kbApiUrl}`);
+      
+      const kbResponse = await fetch(kbApiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+          'Content-Type': 'application/json',
+          'x-bot-id': BOTPRESS_BOT_ID,
+          'x-workspace-id': BOTPRESS_WORKSPACE_ID
+        }
+      });
+      
+      if (kbResponse.ok) {
+        const kbData = await kbResponse.json();
+        console.log('📋 Knowledge Base API response:', JSON.stringify(kbData, null, 2));
+        console.log(`✅ Retrieved ${kbData.knowledgeBases ? kbData.knowledgeBases.length : 0} knowledge bases via Knowledge Base API`);
+        
+        // Convert knowledge base format to match files format
+        const convertedData = {
+          files: kbData.knowledgeBases || [],
+          method: 'knowledge-base'
+        };
+        
+        return res.json(convertedData);
+      }
+      
+      const kbData = await kbResponse.json();
+      console.error('❌ Knowledge Base API failed:', kbData);
+      
+      // If both APIs fail, return the most recent error
+      const filesData = await filesApiResponse.json();
+      return res.status(filesApiResponse.status).json({ 
+        error: 'Failed to fetch files from both APIs', 
+        details: { filesApi: filesData, knowledgeBaseApi: kbData }
+      });
+      
+    } catch (kbError) {
+      console.error('❌ Knowledge Base API error:', kbError);
+      const filesData = await filesApiResponse.json();
+      return res.status(filesApiResponse.status).json({ 
+        error: 'Failed to fetch files', 
+        details: filesData,
+        fallbackError: kbError.message
+      });
+    }
     
   } catch (error) {
     console.error('❌ Files fetch error:', error);
@@ -234,28 +291,75 @@ app.get('/api/files', async (req, res) => {
   }
 });
 
-// Delete file from Botpress
+// Delete file from Botpress (try both Files API and Knowledge Base API)
 app.delete('/api/files/:fileId', async (req, res) => {
   try {
     const { fileId } = req.params;
     console.log(`🗑️ Deleting file from Botpress: ${fileId}`);
     
-    const response = await fetch(`${BOTPRESS_FILES_API_URL}/${fileId}`, {
+    // Check if environment variables are properly loaded
+    if (!BOTPRESS_BOT_ID || !BOTPRESS_WORKSPACE_ID || !BOTPRESS_BEARER_TOKEN) {
+      console.error('❌ Environment variables not properly loaded!');
+      return res.status(500).json({ 
+        error: 'Server configuration error', 
+        message: 'Botpress environment variables are missing.' 
+      });
+    }
+    
+    // Try Files API first
+    const filesApiResponse = await fetch(`${BOTPRESS_FILES_API_URL}/${fileId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-bot-id': BOTPRESS_BOT_ID,
+        'x-workspace-id': BOTPRESS_WORKSPACE_ID
       }
     });
     
-    if (!response.ok) {
-      const data = await response.json();
-      console.error('❌ Failed to delete file from Botpress:', data);
-      return res.status(response.status).json({ error: 'Failed to delete file', details: data });
+    if (filesApiResponse.ok) {
+      console.log('✅ File deleted successfully via Files API');
+      return res.json({ success: true, message: 'File deleted successfully', method: 'files-api' });
     }
     
-    console.log('✅ File deleted successfully from Botpress');
-    res.json({ success: true, message: 'File deleted successfully' });
+    console.log(`❌ Files API delete failed (${filesApiResponse.status}), trying Knowledge Base API...`);
+    
+    // Try Knowledge Base API as fallback
+    try {
+      const kbResponse = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/${fileId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+          'Content-Type': 'application/json',
+          'x-bot-id': BOTPRESS_BOT_ID,
+          'x-workspace-id': BOTPRESS_WORKSPACE_ID
+        }
+      });
+      
+      if (kbResponse.ok) {
+        console.log('✅ File deleted successfully via Knowledge Base API');
+        return res.json({ success: true, message: 'File deleted successfully', method: 'knowledge-base' });
+      }
+      
+      const kbData = await kbResponse.json();
+      console.error('❌ Knowledge Base API delete failed:', kbData);
+      
+      // If both APIs fail, return the most recent error
+      const filesData = await filesApiResponse.json();
+      return res.status(filesApiResponse.status).json({ 
+        error: 'Failed to delete file from both APIs', 
+        details: { filesApi: filesData, knowledgeBaseApi: kbData }
+      });
+      
+    } catch (kbError) {
+      console.error('❌ Knowledge Base API delete error:', kbError);
+      const filesData = await filesApiResponse.json();
+      return res.status(filesApiResponse.status).json({ 
+        error: 'Failed to delete file', 
+        details: filesData,
+        fallbackError: kbError.message
+      });
+    }
     
   } catch (error) {
     console.error('❌ File delete error:', error);
