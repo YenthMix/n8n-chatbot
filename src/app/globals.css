@@ -550,6 +550,13 @@ body {
   color: #666;
 }
 
+.file-tags {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+  font-style: italic;
+}
+
 .delete-button {
   background: #ff4757;
   color: white;

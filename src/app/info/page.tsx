@@ -15,11 +15,20 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 interface UploadedFile {
   id: string;
-  name: string;
-  type: string;
+  name?: string;
+  key?: string;
+  type?: string;
+  contentType?: string;
   size?: number;
   uploadedAt?: string;
+  createdAt?: string;
+  status?: string;
   sentToBotpress?: boolean;
+  tags?: {
+    purpose?: string;
+    origin?: string;
+    [key: string]: any;
+  };
 }
 
 export default function DocumentsPage() {
@@ -32,6 +41,9 @@ export default function DocumentsPage() {
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Debug backend URL
+  console.log('🔧 Backend URL:', BACKEND_URL);
 
   useEffect(() => {
     fetchFiles();
@@ -48,6 +60,14 @@ export default function DocumentsPage() {
       if (response.ok) {
         const data = await response.json();
         console.log('📂 Fetched files:', data);
+        console.log('📂 Files array:', data.files);
+        console.log('📂 Number of files:', data.files ? data.files.length : 0);
+        
+        // Log each file structure
+        if (data.files && data.files.length > 0) {
+          console.log('📂 First file structure:', data.files[0]);
+        }
+        
         setFiles(data.files || []);
       } else {
         console.error('Failed to fetch files:', response.status, response.statusText);
@@ -89,6 +109,8 @@ export default function DocumentsPage() {
     
     if (!file) return;
 
+    console.log('📁 File selected:', file.name, file.type, file.size);
+
     // Validate file type
     if (!SUPPORTED_TYPES.includes(file.type)) {
       showMessage(`Unsupported file type: ${file.type}. Supported formats: PDF, HTML, TXT, DOC, DOCX, MD`, 'error');
@@ -102,7 +124,11 @@ export default function DocumentsPage() {
     }
 
     // Add file to local storage (not sent to Botpress yet)
-    setUploadedFiles(prev => [...prev, file]);
+    setUploadedFiles(prev => {
+      const newFiles = [...prev, file];
+      console.log('📤 Upload queue updated:', newFiles.length, 'files');
+      return newFiles;
+    });
     showMessage(`File "${file.name}" added to upload queue!`, 'success');
   };
 
@@ -199,30 +225,38 @@ export default function DocumentsPage() {
 
     try {
       console.log(`🗑️ Deleting file: ${fileName} (ID: ${fileId})`);
+      console.log(`🌐 Delete URL: ${BACKEND_URL}/api/files/${fileId}`);
       
       const response = await fetch(`${BACKEND_URL}/api/files/${fileId}`, {
         method: 'DELETE'
       });
 
+      console.log(`📡 Delete response status: ${response.status} ${response.statusText}`);
+
       const responseData = await response.json();
-      console.log('🗑️ Delete response:', responseData);
+      console.log('🗑️ Delete response data:', responseData);
 
       if (!response.ok) {
-        throw new Error(responseData.error || 'Delete failed');
+        throw new Error(responseData.error || responseData.message || 'Delete failed');
       }
 
       showMessage(`File "${fileName}" deleted successfully via ${responseData.method || 'unknown'} API!`, 'success');
       
       // Remove from local state immediately for better UX
-      setFiles(prev => prev.filter(f => f.id !== fileId));
+      setFiles(prev => {
+        const newFiles = prev.filter(f => f.id !== fileId);
+        console.log(`🗑️ Removed file from local state. New count: ${newFiles.length}`);
+        return newFiles;
+      });
       
       // Also refresh from server after a short delay to ensure consistency
       setTimeout(async () => {
+        console.log('🔄 Refreshing files from server...');
         await fetchFiles();
       }, 2000);
 
     } catch (error) {
-      console.error('Delete error:', error);
+      console.error('❌ Delete error:', error);
       showMessage(`Failed to delete file: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   };
@@ -290,37 +324,106 @@ export default function DocumentsPage() {
         </div>
 
         {/* Upload Queue - Always show if there are files */}
-        {uploadedFiles.length > 0 && (
-          <div className="upload-queue-section">
-            <h2>📤 Upload Queue ({uploadedFiles.length})</h2>
-            <div className="upload-queue">
-              {uploadedFiles.map((file, index) => (
-                <div key={`queue-${index}`} className="queue-item">
-                  <div className="file-info">
-                    <div className="file-name">📄 {file.name}</div>
-                    <div className="file-meta">
-                      Type: {file.type} • Size: {(file.size / 1024).toFixed(1)}KB
+        {(() => {
+          console.log('🔍 Debug: uploadedFiles.length =', uploadedFiles.length);
+          console.log('🔍 Debug: uploadedFiles =', uploadedFiles);
+          return uploadedFiles.length > 0 && (
+            <div className="upload-queue-section">
+              <h2>📤 Upload Queue ({uploadedFiles.length})</h2>
+              <div className="upload-queue">
+                {uploadedFiles.map((file, index) => (
+                  <div key={`queue-${index}`} className="queue-item">
+                    <div className="file-info">
+                      <div className="file-name">📄 {file.name}</div>
+                      <div className="file-meta">
+                        Type: {file.type} • Size: {(file.size / 1024).toFixed(1)}KB
+                      </div>
                     </div>
+                    <button 
+                      className="remove-button"
+                      onClick={() => removeFromQueue(index)}
+                      title="Remove from queue"
+                    >
+                      ❌
+                    </button>
                   </div>
-                  <button 
-                    className="remove-button"
-                    onClick={() => removeFromQueue(index)}
-                    title="Remove from queue"
-                  >
-                    ❌
-                  </button>
-                </div>
-              ))}
+                ))}
+              </div>
+              <button 
+                className="send-to-botpress-button"
+                onClick={sendToBotpress}
+                disabled={uploading}
+              >
+                {uploading ? '📤 Sending...' : `📤 Send ${uploadedFiles.length} File(s) to Botpress`}
+              </button>
             </div>
-            <button 
-              className="send-to-botpress-button"
-              onClick={sendToBotpress}
-              disabled={uploading}
-            >
-              {uploading ? '📤 Sending...' : `📤 Send ${uploadedFiles.length} File(s) to Botpress`}
-            </button>
-          </div>
-        )}
+          );
+        })()}
+
+        {/* Debug Section - Remove this after fixing */}
+        <div style={{ 
+          background: '#f0f0f0', 
+          padding: '10px', 
+          margin: '10px 0', 
+          borderRadius: '5px', 
+          fontSize: '12px',
+          border: '1px solid #ccc'
+        }}>
+          <strong>Debug Info:</strong><br/>
+          Uploaded Files Count: {uploadedFiles.length}<br/>
+          Files in Botpress: {files.length}<br/>
+          Is Loading: {isLoading.toString()}<br/>
+          Is Uploading: {uploading.toString()}<br/>
+          Upload Progress: {uploadProgress}%<br/>
+          Backend URL: {BACKEND_URL || 'NOT SET'}<br/>
+          <button 
+            onClick={() => {
+              const testFile = new File(['test content'], 'test.txt', { type: 'text/plain' });
+              setUploadedFiles(prev => [...prev, testFile]);
+              console.log('🧪 Test file added to queue');
+            }}
+            style={{ marginTop: '5px', padding: '5px 10px', marginRight: '5px' }}
+          >
+            Add Test File
+          </button>
+          <button 
+            onClick={async () => {
+              console.log('🧪 Testing upload directly...');
+              const testFile = new File(['This is a test document content for Botpress.'], 'test-document.txt', { type: 'text/plain' });
+              const base64Content = await convertToBase64(testFile);
+              
+              try {
+                const response = await fetch(`${BACKEND_URL}/api/upload-file`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    name: testFile.name,
+                    type: testFile.type,
+                    content: base64Content
+                  })
+                });
+
+                const result = await response.json();
+                console.log('🧪 Direct upload result:', result);
+                
+                if (response.ok) {
+                  showMessage('Test upload successful!', 'success');
+                  await fetchFiles(); // Refresh the list
+                } else {
+                  showMessage(`Test upload failed: ${result.error}`, 'error');
+                }
+              } catch (error) {
+                console.error('🧪 Test upload error:', error);
+                showMessage(`Test upload error: ${error}`, 'error');
+              }
+            }}
+            style={{ marginTop: '5px', padding: '5px 10px' }}
+          >
+            Test Upload
+          </button>
+        </div>
 
         {/* Uploaded Files List */}
         <div className="files-section">
@@ -338,16 +441,24 @@ export default function DocumentsPage() {
               {files.map((file) => (
                 <div key={file.id} className="file-item">
                   <div className="file-info">
-                    <div className="file-name">📄 {file.name}</div>
-                    <div className="file-meta">
-                      Type: {file.type} 
-                      {file.size && ` • Size: ${(file.size / 1024).toFixed(1)}KB`}
-                      {file.uploadedAt && ` • Uploaded: ${new Date(file.uploadedAt).toLocaleDateString()}`}
+                    <div className="file-name">
+                      📄 {file.name || file.key || `File ${file.id}`}
                     </div>
+                    <div className="file-meta">
+                      Type: {file.contentType || file.type || 'Unknown'} 
+                      {file.size && ` • Size: ${(file.size / 1024).toFixed(1)}KB`}
+                      {file.createdAt && ` • Created: ${new Date(file.createdAt).toLocaleDateString()}`}
+                      {file.status && ` • Status: ${file.status}`}
+                    </div>
+                    {file.tags && file.tags.purpose && (
+                      <div className="file-tags">
+                        Purpose: {file.tags.purpose} • Origin: {file.tags.origin || 'Unknown'}
+                      </div>
+                    )}
                   </div>
                   <button 
                     className="delete-button"
-                    onClick={() => deleteFile(file.id, file.name)}
+                    onClick={() => deleteFile(file.id, file.name || file.key || `File ${file.id}`)}
                     title="Delete file"
                   >
                     🗑️
