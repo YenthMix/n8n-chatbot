@@ -704,6 +704,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         size: req.file.size,
         index: true,
         accessPolicies: ['public_content'],
+        content: base64Content, // Include the file content directly
         tags: {
           uploadedBy: 'webchat',
           originalName: req.file.originalname
@@ -718,24 +719,14 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     }
 
     const botpressData = await botpressResponse.json();
-    console.log(`✅ File metadata created in Botpress! Upload URL: ${botpressData.uploadUrl}`);
+    console.log(`✅ File metadata created in Botpress! Response:`, JSON.stringify(botpressData, null, 2));
 
-    // Step 3: Upload the actual file content to the upload URL
-    const uploadResponse = await fetch(botpressData.uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': req.file.mimetype
-      },
-      body: fs.readFileSync(filePath) // Send raw file content, not base64
-    });
-
-    if (!uploadResponse.ok) {
-      const uploadErrorText = await uploadResponse.text();
-      console.error(`❌ File upload error: ${uploadResponse.status} - ${uploadErrorText}`);
-      throw new Error(`File upload error: ${uploadResponse.status}`);
+    // Check if file was uploaded successfully
+    if (botpressData.id) {
+      console.log(`✅ File uploaded successfully! File ID: ${botpressData.id}`);
+    } else {
+      throw new Error('No file ID in Botpress response');
     }
-
-    console.log(`✅ File content uploaded successfully! File ID: ${botpressData.id}`);
 
     // Clean up temporary file
     fs.unlinkSync(filePath);
