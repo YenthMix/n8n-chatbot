@@ -88,23 +88,42 @@ app.post('/api/upload-file', async (req, res) => {
     }
     
     console.log(`📁 Uploading file to Botpress: ${name} (${type})`);
+    console.log(`🔑 Using botId: ${BOTPRESS_BOT_ID}, workspaceId: ${BOTPRESS_WORKSPACE_ID}`);
+    console.log(`🌐 Upload URL: ${BOTPRESS_FILES_API_URL}`);
+    console.log(`📄 Content length: ${content.length} characters`);
+    
+    const requestBody = {
+      name: name,
+      type: type,
+      content: content,
+      botId: BOTPRESS_BOT_ID,
+      workspaceId: BOTPRESS_WORKSPACE_ID
+    };
+    
+    console.log('📋 Request body (without content):', { 
+      name: requestBody.name, 
+      type: requestBody.type, 
+      botId: requestBody.botId, 
+      workspaceId: requestBody.workspaceId,
+      contentLength: requestBody.content.length 
+    });
     
     const response = await fetch(BOTPRESS_FILES_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-bot-id': BOTPRESS_BOT_ID,
+        'x-workspace-id': BOTPRESS_WORKSPACE_ID
       },
-      body: JSON.stringify({
-        name: name,
-        type: type,
-        content: content,
-        botId: BOTPRESS_BOT_ID,
-        workspaceId: BOTPRESS_WORKSPACE_ID
-      })
+      body: JSON.stringify(requestBody)
     });
     
+    console.log(`📡 Response status: ${response.status} ${response.statusText}`);
+    console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+    
     const data = await response.json();
+    console.log('📋 Raw Botpress upload response:', JSON.stringify(data, null, 2));
     
     if (!response.ok) {
       console.error('❌ Botpress file upload failed:', data);
@@ -124,16 +143,23 @@ app.post('/api/upload-file', async (req, res) => {
 app.get('/api/files', async (req, res) => {
   try {
     console.log('📂 Fetching files from Botpress...');
+    console.log(`🔑 Using botId: ${BOTPRESS_BOT_ID}, workspaceId: ${BOTPRESS_WORKSPACE_ID}`);
     
-    const response = await fetch(`${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}&workspaceId=${BOTPRESS_WORKSPACE_ID}`, {
+    const url = `${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}&workspaceId=${BOTPRESS_WORKSPACE_ID}`;
+    console.log(`🌐 Request URL: ${url}`);
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-bot-id': BOTPRESS_BOT_ID,
+        'x-workspace-id': BOTPRESS_WORKSPACE_ID
       }
     });
     
     const data = await response.json();
+    console.log('📋 Raw Botpress response:', JSON.stringify(data, null, 2));
     
     if (!response.ok) {
       console.error('❌ Failed to fetch files from Botpress:', data);
@@ -175,6 +201,64 @@ app.delete('/api/files/:fileId', async (req, res) => {
   } catch (error) {
     console.error('❌ File delete error:', error);
     res.status(500).json({ error: 'Failed to delete file', message: error.message });
+  }
+});
+
+// Test Botpress API connectivity
+app.get('/api/test-botpress', async (req, res) => {
+  try {
+    console.log('🧪 Testing Botpress API connectivity...');
+    console.log(`🔑 Bot ID: ${BOTPRESS_BOT_ID}`);
+    console.log(`🔑 Workspace ID: ${BOTPRESS_WORKSPACE_ID}`);
+    console.log(`🔑 Bearer Token: ${BOTPRESS_BEARER_TOKEN.substring(0, 10)}...`);
+    console.log(`🌐 API URL: ${BOTPRESS_FILES_API_URL}`);
+    
+    // Test different endpoints to see what works
+    const testEndpoints = [
+      BOTPRESS_FILES_API_URL,
+      'https://api.botpress.cloud/v1/bots',
+      'https://api.botpress.cloud/v1/workspaces',
+      'https://chat.botpress.cloud'
+    ];
+    
+    for (const endpoint of testEndpoints) {
+      console.log(`\n🌐 Testing endpoint: ${endpoint}`);
+      
+      try {
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log(`   Status: ${response.status} ${response.statusText}`);
+        
+        if (response.status === 404) {
+          console.log('   ❌ Endpoint not found');
+        } else if (response.status === 401) {
+          console.log('   ❌ Authentication failed');
+        } else if (response.status === 405) {
+          console.log('   ❌ Method not allowed');
+        } else {
+          console.log('   ✅ Endpoint accessible');
+          const data = await response.text();
+          console.log(`   Response: ${data.substring(0, 200)}...`);
+        }
+      } catch (err) {
+        console.log(`   ❌ Network error: ${err.message}`);
+      }
+    }
+    
+    res.json({ 
+      message: 'API connectivity test completed - check server logs',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Test error:', error);
+    res.status(500).json({ error: 'Test failed', message: error.message });
   }
 });
 
