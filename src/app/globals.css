@@ -494,9 +494,23 @@ body {
   text-align: center;
   padding: 40px 20px;
   color: #666;
-  background: #f9f9f9;
+  background: #f8f9fa;
   border-radius: 10px;
-  border: 1px dashed #ddd;
+  border: 2px dashed #e0e0e0;
+}
+
+.loading-files {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  background: #f8f9fa;
+  border-radius: 10px;
+  border: 2px dashed #e0e0e0;
+}
+
+.loading-files p {
+  font-size: 16px;
+  animation: pulse 2s infinite;
 }
 
 .files-list {

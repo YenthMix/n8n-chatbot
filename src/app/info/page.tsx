@@ -30,6 +30,7 @@ export default function DocumentsPage() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
+  const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,13 +43,21 @@ export default function DocumentsPage() {
 
   const fetchFiles = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch(`${BACKEND_URL}/api/files`);
       if (response.ok) {
         const data = await response.json();
+        console.log('📂 Fetched files:', data);
         setFiles(data.files || []);
+      } else {
+        console.error('Failed to fetch files:', response.status, response.statusText);
+        const errorData = await response.json();
+        console.error('Error details:', errorData);
       }
     } catch (error) {
       console.error('Failed to fetch files:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -144,7 +153,7 @@ export default function DocumentsPage() {
       
       // Clear uploaded files and refresh the list
       setUploadedFiles([]);
-      fetchFiles();
+      await fetchFiles(); // Wait for the fetch to complete
 
     } catch (error) {
       console.error('Send to Botpress error:', error);
@@ -207,8 +216,10 @@ export default function DocumentsPage() {
       // Remove from local state immediately for better UX
       setFiles(prev => prev.filter(f => f.id !== fileId));
       
-      // Also refresh from server to ensure consistency
-      setTimeout(() => fetchFiles(), 1000);
+      // Also refresh from server after a short delay to ensure consistency
+      setTimeout(async () => {
+        await fetchFiles();
+      }, 2000);
 
     } catch (error) {
       console.error('Delete error:', error);
@@ -278,13 +289,13 @@ export default function DocumentsPage() {
           )}
         </div>
 
-        {/* Upload Queue */}
+        {/* Upload Queue - Always show if there are files */}
         {uploadedFiles.length > 0 && (
           <div className="upload-queue-section">
             <h2>📤 Upload Queue ({uploadedFiles.length})</h2>
             <div className="upload-queue">
               {uploadedFiles.map((file, index) => (
-                <div key={index} className="queue-item">
+                <div key={`queue-${index}`} className="queue-item">
                   <div className="file-info">
                     <div className="file-name">📄 {file.name}</div>
                     <div className="file-meta">
@@ -314,7 +325,11 @@ export default function DocumentsPage() {
         {/* Uploaded Files List */}
         <div className="files-section">
           <h2>📋 Documents in Botpress ({files.length})</h2>
-          {files.length === 0 ? (
+          {isLoading ? (
+            <div className="loading-files">
+              <p>Loading documents...</p>
+            </div>
+          ) : files.length === 0 ? (
             <div className="no-files">
               <p>No documents in Botpress yet. Upload files above and send them to Botpress!</p>
             </div>
