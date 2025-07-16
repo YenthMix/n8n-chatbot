@@ -307,7 +307,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
       if (conversationId && (botText || botImage) && (!botText || !botText.includes('{{ $json'))) {
         console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${botText || '[IMAGE]'}"`);
         
-        // SIMPLE FIX: Use both Map and global object to prevent race conditions
+        // DUAL STORAGE SYSTEM: Use both Map and global object to prevent race conditions
         if (!globalMessages[conversationId]) {
           globalMessages[conversationId] = [];
           console.log(`📦 Created new global storage for: ${conversationId}`);
@@ -324,7 +324,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
           delivered: false
         };
         
-                globalMessages[conversationId].push(newMessage);
+        globalMessages[conversationId].push(newMessage);
         console.log(`📝 STORED MESSAGE ${globalMessages[conversationId].length}: "${botText || '[IMAGE]'}" ${botImage ? '[+IMAGE]' : ''}`);
         console.log(`📊 Total messages in global storage: ${globalMessages[conversationId].length}`);
         
@@ -340,8 +340,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
           global.conversationTimeouts = {};
         }
         
-        // Set ONE timeout per conversation that gets reset with each new message
-        console.log(`⏰ Setting 3-second timeout to deliver ALL messages after n8n finishes...`);
+        // Set ONE timeout per conversation that gets reset with each new message - INCREASED TO 5 SECONDS
+        console.log(`⏰ Setting 5-second timeout to deliver ALL messages after n8n finishes...`);
         global.conversationTimeouts[conversationId] = setTimeout(() => {
           console.log(`⏰ TIMEOUT: N8N finished sending messages for ${conversationId}`);
           
@@ -384,9 +384,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Clean up the global timeout
           delete global.conversationTimeouts[conversationId];
           
-        }, 3000); // Wait 3 seconds after last message before delivering all
+        }, 5000); // INCREASED: Wait 5 seconds after last message before delivering all
         
-        console.log(`⏱️ Waiting 3 seconds for additional messages from n8n...`);
+        console.log(`⏱️ Waiting 5 seconds for additional messages from n8n...`);
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
@@ -434,16 +434,21 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Sort messages by timestamp
           conversationData.messages.sort((a, b) => a.timestamp - b.timestamp);
           
-          // Set timeout for fallback delivery as well
-          if (conversationData.deliveryTimeoutId) {
-            clearTimeout(conversationData.deliveryTimeoutId);
+          // Set timeout for fallback delivery as well - use global timeout system
+          if (global.conversationTimeouts && global.conversationTimeouts[conversationId]) {
+            clearTimeout(global.conversationTimeouts[conversationId]);
           }
           
-          conversationData.deliveryTimeoutId = setTimeout(() => {
+          if (!global.conversationTimeouts) {
+            global.conversationTimeouts = {};
+          }
+          
+          global.conversationTimeouts[conversationId] = setTimeout(() => {
             conversationData.allMessagesReceived = true;
             conversationData.deliveryTimeoutId = null;
+            delete global.conversationTimeouts[conversationId];
             console.log(`✅ FALLBACK: Messages ready for delivery`);
-          }, 3000);
+          }, 5000);
           
           userMessages.delete(conversationId);
         }
@@ -552,20 +557,20 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
           // Show final state after delivery
           console.log(`📊 STATE AFTER DELIVERY:`);
           console.log(`   Bot messages stored: ${botMessages.size}`);
-      console.log(`   User messages tracked: ${userMessages.size}`);
-      console.log(`🏁 Ready for next message cycle`);
+          console.log(`   User messages tracked: ${userMessages.size}`);
+          console.log(`🏁 Ready for next message cycle`);
       
-      res.json({ 
-        success: true, 
+          res.json({ 
+            success: true, 
             messages: undeliveredMessages
-      });
-    } else {
+          });
+        } else {
           console.log(`❌ ALL MESSAGES ALREADY DELIVERED for conversation: ${conversationId}`);
           console.log(`📊 This conversation has ${conversationData.messages.length} total messages, all already delivered`);
-        res.json({ 
-          success: false, 
+          res.json({ 
+            success: false, 
             message: 'All messages already delivered' 
-        });
+          });
         }
       } else {
         // N8N still sending messages - wait for completion
@@ -583,7 +588,7 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
       res.json({ 
         success: false, 
         message: 'No bot messages available' 
-        });
+      });
     }
   } catch (error) {
     console.error('❌ Error getting bot messages:', error);
