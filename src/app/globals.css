@@ -319,6 +319,21 @@ body {
   margin-bottom: 30px;
 }
 
+.kb-info {
+  background: #fce4ec;
+  border: 1px solid #e91e63;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px !important;
+  font-size: 14px !important;
+  color: #333 !important;
+}
+
+.kb-info strong {
+  color: #e91e63;
+  font-family: monospace;
+}
+
 .back-button {
   background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%);
   color: white;
@@ -339,6 +354,105 @@ body {
 
 .back-button:active {
   transform: translateY(0);
+}
+
+/* Document Upload Styles */
+.upload-area {
+  border: 2px dashed #e91e63;
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  margin: 20px 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fafafa;
+}
+
+.upload-area:hover {
+  border-color: #ad1457;
+  background: #f5f5f5;
+}
+
+.upload-area.dragging {
+  border-color: #ad1457;
+  background: #fce4ec;
+  transform: scale(1.02);
+}
+
+.upload-content {
+  pointer-events: none;
+}
+
+.upload-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+}
+
+.upload-text {
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.upload-formats {
+  font-size: 12px;
+  color: #666;
+  margin: 0;
+}
+
+.upload-status {
+  padding: 12px;
+  margin: 15px 0;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  color: #e91e63;
+  font-weight: 500;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #e91e63;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.uploaded-files {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.uploaded-files h3 {
+  color: #e91e63;
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.file-item {
+  padding: 8px 12px;
+  background: white;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border-left: 3px solid #e91e63;
+  font-size: 14px;
 }
 
 /* Responsive design */

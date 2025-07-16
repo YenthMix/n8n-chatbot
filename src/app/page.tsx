@@ -316,9 +316,9 @@ export default function Home() {
       <button 
         className="nav-button"
         onClick={() => window.location.href = '/info'}
-        title="Go to Info Page"
+        title="Add Documents"
       >
-        📄 Info
+        📄 Add Documents
       </button>
       
       <div className="chatbot-messages">

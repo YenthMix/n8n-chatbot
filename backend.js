@@ -7,6 +7,8 @@ require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
 
 const app = express();
 
@@ -55,6 +57,21 @@ app.use((req, res, next) => {
 // Load secrets from .env file
 const API_ID = process.env.API_ID;
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
+
+// Botpress Files API Configuration
+const BOTPRESS_BOT_ID = process.env.BOTPRESS_BOT_ID;
+const BOTPRESS_WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID;
+const BOTPRESS_BEARER_TOKEN = process.env.BOTPRESS_BEARER_TOKEN;
+const BOTPRESS_FILES_API = 'https://api.botpress.cloud/v1/files';
+const BOTPRESS_KNOWLEDGE_BASE_ID = process.env.BOTPRESS_KNOWLEDGE_BASE_ID;
+
+// Configure multer for file uploads
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100MB limit
+  }
+});
 
 
 
@@ -602,6 +619,122 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
 
 app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
+});
+
+// Document upload endpoint
+app.post('/api/upload-document', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const file = req.file;
+    const uploadTimestamp = new Date().toISOString();
+    console.log(`📄 DOCUMENT UPLOAD START at ${uploadTimestamp}: ${file.originalname}`);
+    console.log(`📊 File details: size=${file.size}, type=${file.mimetype}`);
+
+    // Read file content and convert to base64
+    const fileContent = fs.readFileSync(file.path);
+    const base64Content = fileContent.toString('base64');
+    
+    console.log(`📝 File converted to base64, length: ${base64Content.length} characters`);
+
+    // Prepare request to Botpress Files API
+    const botpressPayload = {
+      name: file.originalname,
+      type: file.mimetype,
+      content: base64Content,
+      botId: BOTPRESS_BOT_ID,
+      workspaceId: BOTPRESS_WORKSPACE_ID,
+      knowledgeBaseId: BOTPRESS_KNOWLEDGE_BASE_ID
+    };
+
+    console.log(`🚀 Sending to Botpress Files API...`);
+    console.log(`📍 Bot ID: ${BOTPRESS_BOT_ID}`);
+    console.log(`📍 Workspace ID: ${BOTPRESS_WORKSPACE_ID}`);
+    console.log(`📍 Knowledge Base ID: ${BOTPRESS_KNOWLEDGE_BASE_ID}`);
+
+    // Send to Botpress Files API
+    const botpressResponse = await fetch(BOTPRESS_FILES_API, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(botpressPayload)
+    });
+
+    console.log(`📡 Botpress API response status: ${botpressResponse.status}`);
+
+    if (!botpressResponse.ok) {
+      const errorText = await botpressResponse.text();
+      console.error(`❌ Botpress API error: ${errorText}`);
+      throw new Error(`Botpress API error: ${botpressResponse.status} - ${errorText}`);
+    }
+
+    const botpressResult = await botpressResponse.json();
+    console.log(`✅ File uploaded successfully to Botpress:`, botpressResult);
+
+    // Clean up temporary file
+    fs.unlinkSync(file.path);
+    console.log(`🧹 Temporary file cleaned up: ${file.path}`);
+
+    const successResponse = {
+      success: true,
+      name: file.originalname,
+      size: file.size,
+      type: file.mimetype,
+      botpressId: botpressResult.id || 'unknown',
+      knowledgeBaseId: BOTPRESS_KNOWLEDGE_BASE_ID,
+      uploadedAt: uploadTimestamp,
+      message: `File uploaded successfully to knowledge base ${BOTPRESS_KNOWLEDGE_BASE_ID}`
+    };
+
+    console.log(`🎉 UPLOAD COMPLETE for ${file.originalname} at ${new Date().toISOString()}`);
+    res.json(successResponse);
+
+  } catch (error) {
+    console.error('❌ DOCUMENT UPLOAD ERROR:', error);
+    
+    // Clean up temporary file if it exists
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+        console.log(`🧹 Cleaned up temp file after error: ${req.file.path}`);
+      } catch (cleanupError) {
+        console.error('❌ Failed to cleanup temp file:', cleanupError);
+      }
+    }
+
+    res.status(500).json({ 
+      error: 'Failed to upload document',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// List uploaded documents endpoint
+app.get('/api/list-documents', async (req, res) => {
+  try {
+    console.log(`📋 LISTING DOCUMENTS from Botpress API...`);
+    
+    // Note: Botpress doesn't have a direct "list files" endpoint in the current API
+    // This would require implementing a local database to track uploaded files
+    // For now, return a placeholder response
+    res.json({
+      success: true,
+      message: 'Document listing not yet implemented',
+      note: 'Files are uploaded to Botpress knowledge base and automatically indexed'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error listing documents:', error);
+    res.status(500).json({ 
+      error: 'Failed to list documents',
+      details: error.message 
+    });
+  }
 });
 
 // Health check endpoint
