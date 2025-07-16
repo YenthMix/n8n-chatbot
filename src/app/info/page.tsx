@@ -9,13 +9,11 @@ export default function InfoPage() {
   };
 
   return (
-    <div className="info-container">
-      <button 
-        onClick={handleBackToChat}
-        className="back-button"
-      >
-        ← Back to Chat
-      </button>
-    </div>
+    <button 
+      onClick={handleBackToChat}
+      className="back-button"
+    >
+      ← Back to Chat
+    </button>
   );
 } 
