@@ -695,7 +695,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       method: 'PUT',
       headers: {
         'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155'
       },
       body: JSON.stringify({
         key: fileKey,
