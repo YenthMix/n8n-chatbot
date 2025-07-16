@@ -216,9 +216,10 @@ export default function Home() {
             console.log(`✅ All messages received and displayed - stopping polling`);
             return;
           } else if (botData.message === 'Still collecting messages from n8n') {
-            console.log(`⏳ Backend still collecting messages from n8n (${botData.messagesReceived || 0} received so far)... continuing to wait`);
+            const timeoutActive = botData.timeoutActive ? ' (timeout active)' : ' (no timeout)';
+            console.log(`⏳ Backend still collecting messages from n8n (${botData.messagesReceived || 0} received so far)${timeoutActive}... continuing to wait`);
             consecutiveEmptyPolls = 0; // Reset counter since backend is actively collecting
-            attempts = 0; // Reset attempts counter too - we're making progress
+            attempts = Math.max(0, attempts - 1); // Reduce attempts since we're making progress
           } else {
             console.log(`⏳ No bot messages available yet at ${new Date().toISOString()}, continuing to poll...`);
             consecutiveEmptyPolls++;

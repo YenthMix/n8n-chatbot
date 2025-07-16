@@ -513,15 +513,21 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
     const { conversationId } = req.params;
     let conversationData = botMessages.get(conversationId);
     
-    // FALLBACK: Use global storage if Map data is missing
+    // FALLBACK: Use global storage if Map data is missing, but check if still collecting
     if (!conversationData && globalMessages[conversationId]) {
-      console.log(`📤 Using global storage fallback for conversation: ${conversationId}`);
+      console.log(`📤 FALLBACK: Found global storage for conversation: ${conversationId}`);
+      
+      // Check if we're still collecting messages (timeout exists)
+      const stillCollecting = global.conversationTimeouts && global.conversationTimeouts[conversationId];
+      
       conversationData = {
         messages: globalMessages[conversationId],
-        allMessagesReceived: true, // Assume complete if in global storage
+        allMessagesReceived: !stillCollecting, // Only complete if no timeout running
         lastDelivered: 0,
         deliveryTimeoutId: null
       };
+      
+      console.log(`📤 FALLBACK: Using global storage with ${conversationData.messages.length} messages, stillCollecting: ${stillCollecting}`);
     }
     
     if (conversationData && conversationData.messages.length > 0) {
@@ -569,12 +575,15 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
         }
       } else {
         // N8N still sending messages - wait for completion
+        const timeoutExists = global.conversationTimeouts && global.conversationTimeouts[conversationId];
         console.log(`⏳ N8N still sending messages for conversation: ${conversationId}`);
-        console.log(`📊 Current messages: ${conversationData.messages.length}, waiting for completion...`);
+        console.log(`📊 Current messages: ${conversationData.messages.length}, timeout active: ${!!timeoutExists}`);
+        console.log(`📊 Expected completion in ~${timeoutExists ? '6' : '0'} seconds...`);
         res.json({ 
           success: false, 
           message: 'Still collecting messages from n8n',
-          messagesReceived: conversationData.messages.length
+          messagesReceived: conversationData.messages.length,
+          timeoutActive: !!timeoutExists
         });
       }
     } else {
