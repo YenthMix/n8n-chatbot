@@ -7,6 +7,9 @@ require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 
@@ -39,6 +42,34 @@ app.use(cors({
 // Add body parser with size limits to prevent bad gateway errors
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(__dirname, 'uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+  }),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, TXT, DOCX, and DOC files are allowed.'), false);
+    }
+  }
+});
 
 // Add request timeout middleware with shorter timeout for webhooks
 app.use((req, res, next) => {
@@ -642,6 +673,72 @@ app.post('/api/debug/clear-all', async (req, res) => {
   });
 });
 
+// File upload endpoint for Botpress knowledge base
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    console.log(`📁 File upload received: ${req.file.originalname} (${req.file.size} bytes)`);
+    console.log(`📁 File type: ${req.file.mimetype}`);
+
+    // Step 1: Convert file to Base64
+    const filePath = req.file.path;
+    const base64Content = fs.readFileSync(filePath, 'base64');
+    console.log(`📁 File converted to Base64 (${base64Content.length} characters)`);
+
+    // Step 2: Upload to Botpress Files API
+    const botpressResponse = await fetch('https://api.botpress.cloud/v1/files', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: req.file.originalname,
+        type: req.file.mimetype,
+        content: base64Content,
+        botId: '73dfb145-f1c3-451f-b7c8-ed463a9dd155',
+        workspaceId: 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET'
+      })
+    });
+
+    if (!botpressResponse.ok) {
+      const errorText = await botpressResponse.text();
+      console.error(`❌ Botpress API error: ${botpressResponse.status} - ${errorText}`);
+      throw new Error(`Botpress API error: ${botpressResponse.status}`);
+    }
+
+    const botpressData = await botpressResponse.json();
+    console.log(`✅ File uploaded to Botpress successfully! File ID: ${botpressData.id}`);
+
+    // Clean up temporary file
+    fs.unlinkSync(filePath);
+    console.log(`🧹 Temporary file cleaned up: ${filePath}`);
+
+    res.json({ 
+      success: true, 
+      message: 'File uploaded to knowledge base successfully',
+      fileId: botpressData.id,
+      fileName: req.file.originalname
+    });
+
+  } catch (error) {
+    console.error('❌ File upload error:', error);
+    
+    // Clean up temporary file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+      console.log(`🧹 Cleaned up temporary file after error: ${req.file.path}`);
+    }
+
+    res.status(500).json({ 
+      error: error.message || 'Failed to upload file to knowledge base' 
+    });
+  }
+});
+
 // Debug endpoint to see what's stored
 app.get('/api/debug/stored-responses', async (req, res) => {
   const allBotMessages = {};
@@ -687,6 +784,18 @@ app.get('/api/debug/stored-responses', async (req, res) => {
     webhookQueue: Object.fromEntries(webhookQueue),
     timestamp: Date.now()
   });
+});
+
+// Multer error handler
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    console.error('❌ MULTER ERROR:', err);
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' });
+    }
+    return res.status(400).json({ error: err.message });
+  }
+  next(err);
 });
 
 // Global error handler to prevent bad gateway errors
