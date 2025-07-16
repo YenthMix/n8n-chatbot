@@ -683,20 +683,14 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     console.log(`📁 File upload received: ${req.file.originalname} (${req.file.size} bytes)`);
     console.log(`📁 File type: ${req.file.mimetype}`);
 
-    // Step 1: Convert file to Base64
-    const filePath = req.file.path;
-    const base64Content = fs.readFileSync(filePath, 'base64');
-    console.log(`📁 File converted to Base64 (${base64Content.length} characters)`);
-
-    // Step 2: Create file metadata in Botpress (PUT request)
+    // Step 1: Register file and get uploadUrl
     const fileKey = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    const botpressResponse = await fetch('https://api.botpress.cloud/v1/files', {
+    const registerRes = await fetch('https://api.botpress.cloud/v1/files', {
       method: 'PUT',
       headers: {
         'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
-        'Content-Type': 'application/json',
-        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155'
+        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         key: fileKey,
@@ -704,7 +698,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         size: req.file.size,
         index: true,
         accessPolicies: ['public_content'],
-        content: base64Content, // Include the file content directly
         tags: {
           uploadedBy: 'webchat',
           originalName: req.file.originalname
@@ -712,21 +705,35 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       })
     });
 
-    if (!botpressResponse.ok) {
-      const errorText = await botpressResponse.text();
-      console.error(`❌ Botpress API error: ${botpressResponse.status} - ${errorText}`);
-      throw new Error(`Botpress API error: ${botpressResponse.status}`);
+    if (!registerRes.ok) {
+      const errorText = await registerRes.text();
+      console.error(`❌ Botpress API error: ${registerRes.status} - ${errorText}`);
+      throw new Error(`Botpress API error: ${registerRes.status}`);
     }
 
-    const botpressData = await botpressResponse.json();
-    console.log(`✅ File metadata created in Botpress! Response:`, JSON.stringify(botpressData, null, 2));
-
-    // Check if file was uploaded successfully
-    if (botpressData.file && botpressData.file.id) {
-      console.log(`✅ File uploaded successfully! File ID: ${botpressData.file.id}`);
-    } else {
-      throw new Error('No file ID in Botpress response');
+    const registerData = await registerRes.json();
+    const fileObj = registerData.file || registerData;
+    const uploadUrl = fileObj.uploadUrl;
+    const fileId = fileObj.id;
+    if (!uploadUrl || !fileId) {
+      throw new Error('No uploadUrl or fileId in Botpress response');
     }
+    console.log(`✅ File metadata registered. File ID: ${fileId}, Upload URL: ${uploadUrl}`);
+
+    // Step 2: Upload file content to uploadUrl
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': req.file.mimetype
+      },
+      body: fs.readFileSync(req.file.path)
+    });
+    if (!uploadRes.ok) {
+      const uploadErrorText = await uploadRes.text();
+      console.error(`❌ File content upload error: ${uploadRes.status} - ${uploadErrorText}`);
+      throw new Error(`File content upload error: ${uploadRes.status}`);
+    }
+    console.log(`✅ File content uploaded to storage.`);
 
     // Step 3: Add file to knowledge base
     console.log(`📚 Adding file to knowledge base...`);
@@ -734,14 +741,13 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
-        'Content-Type': 'application/json',
-        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155'
+        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        name: req.file.originalname, // Uses actual filename (e.g., "Text Test.txt", "document.pdf", etc.)
+        name: req.file.originalname,
         type: 'file',
-        fileId: botpressData.file.id,
-        workspaceId: 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET'
+        fileId: fileId
       })
     });
 
@@ -755,26 +761,23 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     console.log(`✅ File added to knowledge base successfully! Document ID: ${kbData.id || 'N/A'}`);
 
     // Clean up temporary file
-    fs.unlinkSync(filePath);
-    console.log(`🧹 Temporary file cleaned up: ${filePath}`);
+    fs.unlinkSync(req.file.path);
+    console.log(`🧹 Temporary file cleaned up: ${req.file.path}`);
 
     res.json({ 
       success: true, 
       message: 'File uploaded to knowledge base successfully',
-      fileId: botpressData.file.id,
+      fileId: fileId,
       documentId: kbData.id,
       fileName: req.file.originalname
     });
-
   } catch (error) {
     console.error('❌ File upload error:', error);
-    
     // Clean up temporary file on error
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
       console.log(`🧹 Cleaned up temporary file after error: ${req.file.path}`);
     }
-
     res.status(500).json({ 
       error: error.message || 'Failed to upload file to knowledge base' 
     });
