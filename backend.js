@@ -87,7 +87,7 @@ const webhookQueue = new Map(); // conversationId -> processing status
 
 // File Upload Endpoints for Botpress Files API
 
-// Upload file to Botpress
+// Upload file to Botpress (try both Files API and Knowledge Base API)
 app.post('/api/upload-file', async (req, res) => {
   try {
     const { name, type, content } = req.body;
@@ -130,7 +130,9 @@ app.post('/api/upload-file', async (req, res) => {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-bot-id': BOTPRESS_BOT_ID,
+        'x-workspace-id': BOTPRESS_WORKSPACE_ID
       },
       body: JSON.stringify(requestBody)
     });
@@ -142,12 +144,53 @@ app.post('/api/upload-file', async (req, res) => {
     console.log('📋 Raw Botpress upload response:', JSON.stringify(data, null, 2));
     
     if (!response.ok) {
-      console.error('❌ Botpress file upload failed:', data);
-      return res.status(response.status).json({ error: 'Failed to upload file to Botpress', details: data });
+      console.error('❌ Botpress Files API failed, trying Knowledge Base API...');
+      
+      // Try Knowledge Base API as fallback
+      try {
+        const kbResponse = await fetch('https://api.botpress.cloud/v1/knowledge-bases', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+            'Content-Type': 'application/json',
+            'x-bot-id': BOTPRESS_BOT_ID,
+            'x-workspace-id': BOTPRESS_WORKSPACE_ID
+          },
+          body: JSON.stringify({
+            name: name,
+            type: type,
+            content: content,
+            botId: BOTPRESS_BOT_ID,
+            workspaceId: BOTPRESS_WORKSPACE_ID
+          })
+        });
+        
+        const kbData = await kbResponse.json();
+        console.log('📋 Knowledge Base API response:', JSON.stringify(kbData, null, 2));
+        
+        if (kbResponse.ok) {
+          console.log('✅ File uploaded successfully via Knowledge Base API:', kbData);
+          return res.json({ success: true, file: kbData, method: 'knowledge-base' });
+        } else {
+          console.error('❌ Knowledge Base API also failed:', kbData);
+          return res.status(response.status).json({ 
+            error: 'Failed to upload file to Botpress', 
+            details: { filesApi: data, knowledgeBaseApi: kbData },
+            message: 'Both Files API and Knowledge Base API failed'
+          });
+        }
+      } catch (kbError) {
+        console.error('❌ Knowledge Base API error:', kbError);
+        return res.status(response.status).json({ 
+          error: 'Failed to upload file to Botpress', 
+          details: data,
+          fallbackError: kbError.message
+        });
+      }
     }
     
     console.log('✅ File uploaded successfully to Botpress:', data);
-    res.json({ success: true, file: data });
+    res.json({ success: true, file: data, method: 'files-api' });
     
   } catch (error) {
     console.error('❌ File upload error:', error);
@@ -168,7 +211,9 @@ app.get('/api/files', async (req, res) => {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-bot-id': BOTPRESS_BOT_ID,
+        'x-workspace-id': BOTPRESS_WORKSPACE_ID
       }
     });
     
