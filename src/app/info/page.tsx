@@ -98,7 +98,7 @@ export default function InfoPage() {
       <div className="info-content">
         <h1>📄 Add Documents</h1>
         <p className="kb-info">
-          📚 Files will be uploaded to knowledge base: <strong>kb-bfdcb1988f</strong>
+          📚 Files will be uploaded to knowledge base: <strong>Documents</strong>
         </p>
         
         <div 
