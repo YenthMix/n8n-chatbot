@@ -32,6 +32,7 @@ body {
   padding: 20px;
   text-align: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: relative;
 }
 
 .chatbot-header h1 {
@@ -53,6 +54,32 @@ body {
 .connection-status.connecting {
   color: #fff;
   animation: pulse 2s infinite;
+}
+
+.header-buttons {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 10px;
+}
+
+.info-button, .files-button {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.info-button:hover, .files-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
 }
 
 
@@ -258,35 +285,7 @@ body {
   background: #ad1457;
 }
 
-/* Navigation Button */
-.nav-button {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%);
-  color: white;
-  border: none;
-  padding: 12px 16px;
-  border-radius: 25px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(233, 30, 99, 0.3);
-  z-index: 10;
-}
-
-.nav-button:hover {
-  transform: translateY(-50%) scale(1.05);
-  box-shadow: 0 6px 20px rgba(233, 30, 99, 0.4);
-}
-
-.nav-button:active {
-  transform: translateY(-50%) scale(0.95);
-}
-
-/* Info Page Styles */
+/* Info page styling */
 .info-container {
   min-height: 100vh;
   display: flex;
@@ -307,19 +306,108 @@ body {
 
 .info-content h1 {
   color: #e91e63;
-  font-size: 28px;
-  font-weight: 600;
   margin-bottom: 20px;
+  font-size: 28px;
 }
 
 .info-content p {
   color: #666;
+  margin-bottom: 30px;
   font-size: 16px;
   line-height: 1.6;
-  margin-bottom: 30px;
 }
 
 .back-button {
+  background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%);
+  color: white;
+  text-decoration: none;
+  padding: 12px 24px;
+  border-radius: 25px;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: inline-block;
+}
+
+.back-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(233, 30, 99, 0.4);
+}
+
+/* Files page styling */
+.files-container {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.files-content {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(244, 143, 177, 0.3);
+  padding: 40px;
+  max-width: 800px;
+  width: 100%;
+  margin-bottom: 40px;
+}
+
+.files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.files-header h1 {
+  color: #e91e63;
+  margin: 0;
+  font-size: 28px;
+}
+
+.upload-section, .search-section, .files-list-section {
+  margin-bottom: 40px;
+  padding: 20px;
+  border: 1px solid #f0f0f0;
+  border-radius: 15px;
+  background: #fafafa;
+}
+
+.upload-section h2, .search-section h2, .files-list-section h2 {
+  color: #e91e63;
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+
+.upload-area, .search-area {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.file-input {
+  padding: 12px;
+  border: 2px dashed #e91e63;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+}
+
+.selected-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+.upload-button, .search-button, .refresh-button {
   background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%);
   color: white;
   border: none;
@@ -329,16 +417,140 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(233, 30, 99, 0.3);
 }
 
-.back-button:hover {
+.upload-button:hover, .search-button:hover, .refresh-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(233, 30, 99, 0.4);
+  box-shadow: 0 5px 15px rgba(233, 30, 99, 0.4);
 }
 
-.back-button:active {
-  transform: translateY(0);
+.upload-button:disabled, .search-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%);
+  transition: width 0.3s ease;
+}
+
+.search-input {
+  padding: 12px 16px;
+  border: 2px solid #f0f0f0;
+  border-radius: 25px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  border-color: #e91e63;
+  box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.1);
+}
+
+.search-results {
+  margin-top: 20px;
+}
+
+.search-result {
+  background: white;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  border-left: 4px solid #e91e63;
+}
+
+.search-result h4 {
+  color: #e91e63;
+  margin-bottom: 8px;
+}
+
+.search-result p {
+  color: #666;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.score {
+  font-size: 12px;
+  color: #999;
+  font-weight: 500;
+}
+
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  transition: all 0.3s ease;
+}
+
+.file-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.file-info h4 {
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.file-info p {
+  color: #666;
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.delete-button {
+  background: #ff4757;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.delete-button:hover {
+  background: #ff3742;
+  transform: scale(1.05);
+}
+
+.no-files {
+  text-align: center;
+  color: #999;
+  font-style: italic;
+  padding: 40px;
+}
+
+.refresh-button {
+  margin-bottom: 20px;
 }
 
 /* Responsive design */
@@ -351,11 +563,5 @@ body {
   
   body {
     padding: 0;
-  }
-  
-  .nav-button {
-    right: 10px;
-    padding: 10px 14px;
-    font-size: 12px;
   }
 }
