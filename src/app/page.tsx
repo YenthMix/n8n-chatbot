@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
@@ -310,14 +309,6 @@ export default function Home() {
         <h1>💬 Botpress ChatBot</h1>
         <div className={`connection-status ${isConnected ? 'connected' : 'connecting'}`}>
           {isConnected ? '🟢 Connected to Botpress' : '🟡 Connecting...'}
-        </div>
-        <div className="header-buttons">
-          <Link href="/info" className="info-button">
-            ℹ️ Info
-          </Link>
-          <Link href="/files" className="files-button">
-            📁 Files
-          </Link>
         </div>
       </div>
       
