@@ -57,10 +57,10 @@ const API_ID = process.env.API_ID;
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 // Botpress Files API Configuration
-const BOTPRESS_BOT_ID = process.env.BOTPRESS_BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
-const BOTPRESS_WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID || 'wf-main';
-const BOTPRESS_BEARER_TOKEN = process.env.BOTPRESS_BEARER_TOKEN || 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
-const BOTPRESS_FILES_API_URL = process.env.BOTPRESS_FILES_API_URL || 'https://api.botpress.cloud/v1/files';
+const BOTPRESS_BOT_ID = process.env.BOTPRESS_BOT_ID;
+const BOTPRESS_WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID;
+const BOTPRESS_BEARER_TOKEN = process.env.BOTPRESS_BEARER_TOKEN;
+const BOTPRESS_FILES_API_URL = process.env.BOTPRESS_FILES_API_URL;
 
 
 
@@ -112,9 +112,7 @@ app.post('/api/upload-file', async (req, res) => {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json',
-        'x-bot-id': BOTPRESS_BOT_ID,
-        'x-workspace-id': BOTPRESS_WORKSPACE_ID
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody)
     });
@@ -152,9 +150,7 @@ app.get('/api/files', async (req, res) => {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json',
-        'x-bot-id': BOTPRESS_BOT_ID,
-        'x-workspace-id': BOTPRESS_WORKSPACE_ID
+        'Content-Type': 'application/json'
       }
     });
     
@@ -204,7 +200,7 @@ app.delete('/api/files/:fileId', async (req, res) => {
   }
 });
 
-// Test Botpress API connectivity
+// Test Botpress API connectivity and find correct workspace
 app.get('/api/test-botpress', async (req, res) => {
   try {
     console.log('🧪 Testing Botpress API connectivity...');
@@ -213,20 +209,49 @@ app.get('/api/test-botpress', async (req, res) => {
     console.log(`🔑 Bearer Token: ${BOTPRESS_BEARER_TOKEN.substring(0, 10)}...`);
     console.log(`🌐 API URL: ${BOTPRESS_FILES_API_URL}`);
     
-    // Test different endpoints to see what works
-    const testEndpoints = [
-      BOTPRESS_FILES_API_URL,
-      'https://api.botpress.cloud/v1/bots',
-      'https://api.botpress.cloud/v1/workspaces',
-      'https://chat.botpress.cloud'
+    const results = {};
+    
+    // Test different approaches to find the correct workspace
+    const testCases = [
+      {
+        name: 'Files API with current workspace',
+        method: 'GET',
+        url: `${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}&workspaceId=${BOTPRESS_WORKSPACE_ID}`
+      },
+      {
+        name: 'Files API without workspace',
+        method: 'GET', 
+        url: `${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}`
+      },
+      {
+        name: 'Files API with empty workspace',
+        method: 'GET',
+        url: `${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}&workspaceId=`
+      },
+      {
+        name: 'Bot info endpoint',
+        method: 'GET',
+        url: `https://api.botpress.cloud/v1/bots/${BOTPRESS_BOT_ID}`
+      },
+      {
+        name: 'Files API base endpoint',
+        method: 'GET',
+        url: BOTPRESS_FILES_API_URL
+      },
+      {
+        name: 'Knowledge Base API',
+        method: 'GET',
+        url: `https://api.botpress.cloud/v1/knowledge-bases?botId=${BOTPRESS_BOT_ID}`
+      }
     ];
     
-    for (const endpoint of testEndpoints) {
-      console.log(`\n🌐 Testing endpoint: ${endpoint}`);
+    for (const test of testCases) {
+      console.log(`\n🧪 Testing: ${test.name}`);
+      console.log(`   URL: ${test.url}`);
       
       try {
-        const response = await fetch(endpoint, {
-          method: 'GET',
+        const response = await fetch(test.url, {
+          method: test.method,
           headers: {
             'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
             'Content-Type': 'application/json'
@@ -235,25 +260,48 @@ app.get('/api/test-botpress', async (req, res) => {
         
         console.log(`   Status: ${response.status} ${response.statusText}`);
         
-        if (response.status === 404) {
-          console.log('   ❌ Endpoint not found');
-        } else if (response.status === 401) {
-          console.log('   ❌ Authentication failed');
-        } else if (response.status === 405) {
-          console.log('   ❌ Method not allowed');
+        let responseData = {};
+        try {
+          responseData = await response.json();
+        } catch (e) {
+          responseData = { error: 'Non-JSON response' };
+        }
+        
+        results[test.name] = {
+          status: response.status,
+          statusText: response.statusText,
+          data: responseData
+        };
+        
+        if (response.ok) {
+          console.log(`   ✅ Success!`);
+          console.log(`   Response:`, JSON.stringify(responseData, null, 2));
+          
+          // Look for workspace information in the response
+          if (responseData.workspace || responseData.workspaceId) {
+            console.log(`   🎯 FOUND WORKSPACE INFO:`, {
+              workspace: responseData.workspace,
+              workspaceId: responseData.workspaceId
+            });
+          }
         } else {
-          console.log('   ✅ Endpoint accessible');
-          const data = await response.text();
-          console.log(`   Response: ${data.substring(0, 200)}...`);
+          console.log(`   ❌ Failed:`, responseData.message || responseData.error || 'Unknown error');
         }
       } catch (err) {
         console.log(`   ❌ Network error: ${err.message}`);
+        results[test.name] = { error: err.message };
       }
     }
     
     res.json({ 
-      message: 'API connectivity test completed - check server logs',
-      timestamp: new Date().toISOString()
+      message: 'API connectivity test completed',
+      timestamp: new Date().toISOString(),
+      currentConfig: {
+        botId: BOTPRESS_BOT_ID,
+        workspaceId: BOTPRESS_WORKSPACE_ID,
+        apiUrl: BOTPRESS_FILES_API_URL
+      },
+      results: results
     });
     
   } catch (error) {
