@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
@@ -305,14 +304,22 @@ export default function Home() {
   };
 
   return (
-    <>
-      <div className="chatbot-container">
-        <div className="chatbot-header">
-          <h1>💬 Botpress ChatBot</h1>
-          <div className={`connection-status ${isConnected ? 'connected' : 'connecting'}`}>
-            {isConnected ? '🟢 Connected to Botpress' : '🟡 Connecting...'}
-          </div>
+    <div className="chatbot-container">
+      <div className="chatbot-header">
+        <h1>💬 Botpress ChatBot</h1>
+        <div className={`connection-status ${isConnected ? 'connected' : 'connecting'}`}>
+          {isConnected ? '🟢 Connected to Botpress' : '🟡 Connecting...'}
         </div>
+      </div>
+      
+      {/* Navigation Button */}
+      <button 
+        className="nav-button"
+        onClick={() => window.location.href = '/info'}
+        title="Go to Info Page"
+      >
+        📄 Info
+      </button>
       
       <div className="chatbot-messages">
         {messages.map((message) => (
@@ -381,11 +388,5 @@ export default function Home() {
         </button>
       </div>
     </div>
-    
-    {/* Navigation button */}
-    <Link href="/settings" className="nav-button">
-      ⚙️ Settings
-    </Link>
-  </>
   );
 }
