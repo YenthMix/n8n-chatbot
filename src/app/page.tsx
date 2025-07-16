@@ -33,17 +33,21 @@ export default function Home() {
     initializeChatAPI();
   }, []);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change - but only after DOM is stable
   useEffect(() => {
     const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
     };
     
-    // Small delay to ensure DOM is updated
-    const timeoutId = setTimeout(scrollToBottom, 100);
+    // Use requestAnimationFrame instead of setTimeout to avoid interference
+    const animationFrameId = requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToBottom);
+    });
     
-    return () => clearTimeout(timeoutId);
-  }, [messages]);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [messages.length]); // Only trigger on message count change, not content change
 
   // Removed old polling mechanism - now using direct bot response endpoint
 

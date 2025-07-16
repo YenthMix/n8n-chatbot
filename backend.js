@@ -307,7 +307,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
       if (conversationId && (botText || botImage) && (!botText || !botText.includes('{{ $json'))) {
         console.log(`💾 STORING INDIVIDUAL BOT MESSAGE at ${botMessageTimestamp}: "${botText || '[IMAGE]'}"`);
         
-        // DUAL STORAGE SYSTEM: Use both Map and global object to prevent race conditions
+        // SIMPLE FIX: Use both Map and global object to prevent race conditions
         if (!globalMessages[conversationId]) {
           globalMessages[conversationId] = [];
           console.log(`📦 Created new global storage for: ${conversationId}`);
@@ -340,8 +340,8 @@ app.post('/api/botpress-webhook', async (req, res) => {
           global.conversationTimeouts = {};
         }
         
-        // Set ONE timeout per conversation that gets reset with each new message - INCREASED TO 5 SECONDS
-        console.log(`⏰ Setting 5-second timeout to deliver ALL messages after n8n finishes...`);
+        // Set ONE timeout per conversation that gets reset with each new message
+        console.log(`⏰ Setting 3-second timeout to deliver ALL messages after n8n finishes...`);
         global.conversationTimeouts[conversationId] = setTimeout(() => {
           console.log(`⏰ TIMEOUT: N8N finished sending messages for ${conversationId}`);
           
@@ -384,9 +384,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Clean up the global timeout
           delete global.conversationTimeouts[conversationId];
           
-        }, 5000); // INCREASED: Wait 5 seconds after last message before delivering all
+        }, 3000); // Wait 3 seconds after last message before delivering all
         
-        console.log(`⏱️ Waiting 5 seconds for additional messages from n8n...`);
+        console.log(`⏱️ Waiting 3 seconds for additional messages from n8n...`);
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
@@ -434,21 +434,16 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Sort messages by timestamp
           conversationData.messages.sort((a, b) => a.timestamp - b.timestamp);
           
-          // Set timeout for fallback delivery as well - use global timeout system
-          if (global.conversationTimeouts && global.conversationTimeouts[conversationId]) {
-            clearTimeout(global.conversationTimeouts[conversationId]);
+          // Set timeout for fallback delivery as well
+          if (conversationData.deliveryTimeoutId) {
+            clearTimeout(conversationData.deliveryTimeoutId);
           }
           
-          if (!global.conversationTimeouts) {
-            global.conversationTimeouts = {};
-          }
-          
-          global.conversationTimeouts[conversationId] = setTimeout(() => {
+          conversationData.deliveryTimeoutId = setTimeout(() => {
             conversationData.allMessagesReceived = true;
             conversationData.deliveryTimeoutId = null;
-            delete global.conversationTimeouts[conversationId];
             console.log(`✅ FALLBACK: Messages ready for delivery`);
-          }, 5000);
+          }, 3000);
           
           userMessages.delete(conversationId);
         }
