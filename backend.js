@@ -722,8 +722,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     console.log(`✅ File metadata created in Botpress! Response:`, JSON.stringify(botpressData, null, 2));
 
     // Check if file was uploaded successfully
-    if (botpressData.id) {
-      console.log(`✅ File uploaded successfully! File ID: ${botpressData.id}`);
+    if (botpressData.file && botpressData.file.id) {
+      console.log(`✅ File uploaded successfully! File ID: ${botpressData.file.id}`);
     } else {
       throw new Error('No file ID in Botpress response');
     }
@@ -735,7 +735,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     res.json({ 
       success: true, 
       message: 'File uploaded to knowledge base successfully',
-      fileId: botpressData.id,
+      fileId: botpressData.file.id,
       fileName: req.file.originalname
     });
 
