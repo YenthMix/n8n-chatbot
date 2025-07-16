@@ -688,19 +688,25 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const base64Content = fs.readFileSync(filePath, 'base64');
     console.log(`📁 File converted to Base64 (${base64Content.length} characters)`);
 
-    // Step 2: Upload to Botpress Files API
+    // Step 2: Create file metadata in Botpress (PUT request)
+    const fileKey = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     const botpressResponse = await fetch('https://api.botpress.cloud/v1/files', {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        name: req.file.originalname,
-        type: req.file.mimetype,
-        content: base64Content,
-        botId: '73dfb145-f1c3-451f-b7c8-ed463a9dd155',
-        workspaceId: 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET'
+        key: fileKey,
+        contentType: req.file.mimetype,
+        size: req.file.size,
+        index: true,
+        accessPolicies: ['public_content'],
+        tags: {
+          uploadedBy: 'webchat',
+          originalName: req.file.originalname
+        }
       })
     });
 
@@ -711,7 +717,24 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     }
 
     const botpressData = await botpressResponse.json();
-    console.log(`✅ File uploaded to Botpress successfully! File ID: ${botpressData.id}`);
+    console.log(`✅ File metadata created in Botpress! Upload URL: ${botpressData.uploadUrl}`);
+
+    // Step 3: Upload the actual file content to the upload URL
+    const uploadResponse = await fetch(botpressData.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': req.file.mimetype
+      },
+      body: fs.readFileSync(filePath) // Send raw file content, not base64
+    });
+
+    if (!uploadResponse.ok) {
+      const uploadErrorText = await uploadResponse.text();
+      console.error(`❌ File upload error: ${uploadResponse.status} - ${uploadErrorText}`);
+      throw new Error(`File upload error: ${uploadResponse.status}`);
+    }
+
+    console.log(`✅ File content uploaded successfully! File ID: ${botpressData.id}`);
 
     // Clean up temporary file
     fs.unlinkSync(filePath);
