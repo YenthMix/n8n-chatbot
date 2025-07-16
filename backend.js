@@ -341,7 +341,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
         }
         
         // Set ONE timeout per conversation that gets reset with each new message
-        console.log(`⏰ Setting 3-second timeout to deliver ALL messages after n8n finishes...`);
+        console.log(`⏰ Setting 6-second timeout to deliver ALL messages after n8n finishes...`);
         global.conversationTimeouts[conversationId] = setTimeout(() => {
           console.log(`⏰ TIMEOUT: N8N finished sending messages for ${conversationId}`);
           
@@ -384,9 +384,9 @@ app.post('/api/botpress-webhook', async (req, res) => {
           // Clean up the global timeout
           delete global.conversationTimeouts[conversationId];
           
-        }, 3000); // Wait 3 seconds after last message before delivering all
+        }, 6000); // Wait 6 seconds after last message before delivering all (increased for larger message sets)
         
-        console.log(`⏱️ Waiting 3 seconds for additional messages from n8n...`);
+        console.log(`⏱️ Waiting 6 seconds for additional messages from n8n...`);
       }
     } else if (isUserMessage) {
       console.log('👤 IDENTIFIED AS USER MESSAGE (isBot: false) - will NOT store or display');
@@ -443,7 +443,7 @@ app.post('/api/botpress-webhook', async (req, res) => {
             conversationData.allMessagesReceived = true;
             conversationData.deliveryTimeoutId = null;
             console.log(`✅ FALLBACK: Messages ready for delivery`);
-          }, 3000);
+          }, 6000);
           
           userMessages.delete(conversationId);
         }
@@ -541,7 +541,7 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
           // Log each message being delivered
           undeliveredMessages.forEach((msg, idx) => {
             const displayText = msg.text ? msg.text.substring(0, 100) + (msg.text.length > 100 ? '...' : '') : '[IMAGE]';
-            console.log(`   Message ${idx + 1}: "${displayText}" ${msg.image ? '[+IMAGE]' : ''} (${msg.receivedAt})`);
+            console.log(`   Message ${idx + 1}: "${displayText}" ${msg.image ? '[+IMAGE: ' + msg.image.substring(0, 50) + '...]' : ''} (${msg.receivedAt})`);
           });
           
           // Mark messages as delivered

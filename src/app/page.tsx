@@ -195,7 +195,7 @@ export default function Home() {
             
             // Log each message received
             botData.messages.forEach((msg: any, idx: number) => {
-              console.log(`   Message ${idx + 1}: "${msg.text || '[IMAGE]'}" (received: ${msg.receivedAt})`);
+              console.log(`   Message ${idx + 1}: "${msg.text || '[IMAGE]'}" ${msg.image ? '[+IMAGE: ' + msg.image.substring(0, 50) + '...]' : ''} (received: ${msg.receivedAt})`);
             });
             
             // Add each message separately to the chat in timestamp order
