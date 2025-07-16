@@ -8,7 +8,6 @@ const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const multer = require('multer');
-const fs = require('fs');
 
 const app = express();
 
@@ -65,9 +64,9 @@ const BOTPRESS_BEARER_TOKEN = process.env.BOTPRESS_BEARER_TOKEN;
 const BOTPRESS_FILES_API = 'https://api.botpress.cloud/v1/files';
 const BOTPRESS_KNOWLEDGE_BASE_ID = process.env.BOTPRESS_KNOWLEDGE_BASE_ID;
 
-// Configure multer for file uploads
+// Configure multer for file uploads (memory storage for serverless)
 const upload = multer({ 
-  dest: 'uploads/',
+  storage: multer.memoryStorage(), // Store in memory instead of disk
   limits: {
     fileSize: 100 * 1024 * 1024 // 100MB limit
   }
@@ -633,11 +632,10 @@ app.post('/api/upload-document', upload.single('file'), async (req, res) => {
     console.log(`📄 DOCUMENT UPLOAD START at ${uploadTimestamp}: ${file.originalname}`);
     console.log(`📊 File details: size=${file.size}, type=${file.mimetype}`);
 
-    // Read file content and convert to base64
-    const fileContent = fs.readFileSync(file.path);
-    const base64Content = fileContent.toString('base64');
+    // Convert file buffer to base64 (no disk storage needed)
+    const base64Content = file.buffer.toString('base64');
     
-    console.log(`📝 File converted to base64, length: ${base64Content.length} characters`);
+    console.log(`📝 File converted to base64 from memory, length: ${base64Content.length} characters`);
 
     // Prepare request to Botpress Files API
     const botpressPayload = {
@@ -675,9 +673,7 @@ app.post('/api/upload-document', upload.single('file'), async (req, res) => {
     const botpressResult = await botpressResponse.json();
     console.log(`✅ File uploaded successfully to Botpress:`, botpressResult);
 
-    // Clean up temporary file
-    fs.unlinkSync(file.path);
-    console.log(`🧹 Temporary file cleaned up: ${file.path}`);
+    // No file cleanup needed - using memory storage
 
     const successResponse = {
       success: true,
@@ -696,15 +692,7 @@ app.post('/api/upload-document', upload.single('file'), async (req, res) => {
   } catch (error) {
     console.error('❌ DOCUMENT UPLOAD ERROR:', error);
     
-    // Clean up temporary file if it exists
-    if (req.file && req.file.path) {
-      try {
-        fs.unlinkSync(req.file.path);
-        console.log(`🧹 Cleaned up temp file after error: ${req.file.path}`);
-      } catch (cleanupError) {
-        console.error('❌ Failed to cleanup temp file:', cleanupError);
-      }
-    }
+    // No file cleanup needed - using memory storage
 
     res.status(500).json({ 
       error: 'Failed to upload document',
