@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 // Load config from environment variables
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
@@ -15,6 +16,7 @@ interface Message {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome-1', text: "Hallo! Hoe kan ik u vandaag helpen?", isBot: true }
   ]);
@@ -303,6 +305,10 @@ export default function Home() {
     }
   };
 
+  const handleNavigateToInfo = () => {
+    router.push('/info');
+  };
+
   return (
     <div className="chatbot-container">
       <div className="chatbot-header">
@@ -311,6 +317,14 @@ export default function Home() {
           {isConnected ? '🟢 Connected to Botpress' : '🟡 Connecting...'}
         </div>
       </div>
+      
+      {/* Navigation button */}
+      <button 
+        onClick={handleNavigateToInfo}
+        className="nav-button"
+      >
+        ℹ️ Info
+      </button>
       
       <div className="chatbot-messages">
         {messages.map((message) => (
