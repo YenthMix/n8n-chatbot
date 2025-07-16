@@ -7,7 +7,6 @@ require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
-const multer = require('multer');
 
 const app = express();
 
@@ -58,19 +57,10 @@ const API_ID = process.env.API_ID;
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 // Botpress Files API Configuration
-const BOTPRESS_BOT_ID = process.env.BOTPRESS_BOT_ID;
-const BOTPRESS_WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID;
-const BOTPRESS_BEARER_TOKEN = process.env.BOTPRESS_BEARER_TOKEN;
-const BOTPRESS_FILES_API = 'https://api.botpress.cloud/v1/files';
-const BOTPRESS_KNOWLEDGE_BASE_ID = process.env.BOTPRESS_KNOWLEDGE_BASE_ID;
-
-// Configure multer for file uploads (memory storage for serverless)
-const upload = multer({ 
-  storage: multer.memoryStorage(), // Store in memory instead of disk
-  limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB limit
-  }
-});
+const BOTPRESS_BOT_ID = process.env.BOTPRESS_BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
+const BOTPRESS_WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID || 'wf-main';
+const BOTPRESS_BEARER_TOKEN = process.env.BOTPRESS_BEARER_TOKEN || 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
+const BOTPRESS_FILES_API_URL = process.env.BOTPRESS_FILES_API_URL || 'https://api.botpress.cloud/v1/files';
 
 
 
@@ -85,6 +75,148 @@ const userMessages = new Map();
 
 // Track webhook processing to prevent race conditions
 const webhookQueue = new Map(); // conversationId -> processing status
+
+// File Upload Endpoints for Botpress Files API
+
+// Upload file to Botpress
+app.post('/api/upload-file', async (req, res) => {
+  try {
+    const { name, type, content } = req.body;
+    
+    if (!name || !type || !content) {
+      return res.status(400).json({ error: 'Missing required fields: name, type, content' });
+    }
+    
+    console.log(`📁 Uploading file to Botpress: ${name} (${type})`);
+    
+    const response = await fetch(BOTPRESS_FILES_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: name,
+        type: type,
+        content: content,
+        botId: BOTPRESS_BOT_ID,
+        workspaceId: BOTPRESS_WORKSPACE_ID
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('❌ Botpress file upload failed:', data);
+      return res.status(response.status).json({ error: 'Failed to upload file to Botpress', details: data });
+    }
+    
+    console.log('✅ File uploaded successfully to Botpress:', data);
+    res.json({ success: true, file: data });
+    
+  } catch (error) {
+    console.error('❌ File upload error:', error);
+    res.status(500).json({ error: 'File upload failed', message: error.message });
+  }
+});
+
+// List uploaded files from Botpress
+app.get('/api/files', async (req, res) => {
+  try {
+    console.log('📂 Fetching files from Botpress...');
+    
+    const response = await fetch(`${BOTPRESS_FILES_API_URL}?botId=${BOTPRESS_BOT_ID}&workspaceId=${BOTPRESS_WORKSPACE_ID}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('❌ Failed to fetch files from Botpress:', data);
+      return res.status(response.status).json({ error: 'Failed to fetch files', details: data });
+    }
+    
+    console.log(`✅ Retrieved ${data.files ? data.files.length : 0} files from Botpress`);
+    res.json(data);
+    
+  } catch (error) {
+    console.error('❌ Files fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch files', message: error.message });
+  }
+});
+
+// Delete file from Botpress
+app.delete('/api/files/:fileId', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    console.log(`🗑️ Deleting file from Botpress: ${fileId}`);
+    
+    const response = await fetch(`${BOTPRESS_FILES_API_URL}/${fileId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const data = await response.json();
+      console.error('❌ Failed to delete file from Botpress:', data);
+      return res.status(response.status).json({ error: 'Failed to delete file', details: data });
+    }
+    
+    console.log('✅ File deleted successfully from Botpress');
+    res.json({ success: true, message: 'File deleted successfully' });
+    
+  } catch (error) {
+    console.error('❌ File delete error:', error);
+    res.status(500).json({ error: 'Failed to delete file', message: error.message });
+  }
+});
+
+// Search files in Botpress
+app.post('/api/search-files', async (req, res) => {
+  try {
+    const { query } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Missing search query' });
+    }
+    
+    console.log(`🔍 Searching files in Botpress for: "${query}"`);
+    
+    const response = await fetch(`${BOTPRESS_FILES_API_URL}/search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query: query,
+        botId: BOTPRESS_BOT_ID,
+        workspaceId: BOTPRESS_WORKSPACE_ID
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('❌ Failed to search files in Botpress:', data);
+      return res.status(response.status).json({ error: 'Failed to search files', details: data });
+    }
+    
+    console.log(`✅ Found ${data.results ? data.results.length : 0} search results in Botpress`);
+    res.json(data);
+    
+  } catch (error) {
+    console.error('❌ File search error:', error);
+    res.status(500).json({ error: 'Failed to search files', message: error.message });
+  }
+});
 
 app.post('/api/user', async (req, res) => {
   try {
@@ -618,111 +750,6 @@ app.get('/api/bot-response/:conversationId', async (req, res) => {
 
 app.get('/api/botpress-webhook', async (req, res) => {
   res.json({ status: 'healthy', timestamp: Date.now() });
-});
-
-// Document upload endpoint
-app.post('/api/upload-document', upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const file = req.file;
-    const uploadTimestamp = new Date().toISOString();
-    console.log(`📄 DOCUMENT UPLOAD START at ${uploadTimestamp}: ${file.originalname}`);
-    console.log(`📊 File details: size=${file.size}, type=${file.mimetype}`);
-
-    // Convert file buffer to base64 (no disk storage needed)
-    const base64Content = file.buffer.toString('base64');
-    
-    console.log(`📝 File converted to base64 from memory, length: ${base64Content.length} characters`);
-
-    // Prepare request to Botpress Files API
-    const botpressPayload = {
-      name: file.originalname,
-      type: file.mimetype,
-      content: base64Content,
-      botId: BOTPRESS_BOT_ID,
-      workspaceId: BOTPRESS_WORKSPACE_ID,
-      knowledgeBaseId: BOTPRESS_KNOWLEDGE_BASE_ID
-    };
-
-    console.log(`🚀 Sending to Botpress Files API...`);
-    console.log(`📍 Bot ID: ${BOTPRESS_BOT_ID}`);
-    console.log(`📍 Workspace ID: ${BOTPRESS_WORKSPACE_ID}`);
-    console.log(`📍 Knowledge Base ID: ${BOTPRESS_KNOWLEDGE_BASE_ID}`);
-
-    // Send to Botpress Files API
-    const botpressResponse = await fetch(BOTPRESS_FILES_API, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${BOTPRESS_BEARER_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(botpressPayload)
-    });
-
-    console.log(`📡 Botpress API response status: ${botpressResponse.status}`);
-
-    if (!botpressResponse.ok) {
-      const errorText = await botpressResponse.text();
-      console.error(`❌ Botpress API error: ${errorText}`);
-      throw new Error(`Botpress API error: ${botpressResponse.status} - ${errorText}`);
-    }
-
-    const botpressResult = await botpressResponse.json();
-    console.log(`✅ File uploaded successfully to Botpress:`, botpressResult);
-
-    // No file cleanup needed - using memory storage
-
-    const successResponse = {
-      success: true,
-      name: file.originalname,
-      size: file.size,
-      type: file.mimetype,
-      botpressId: botpressResult.id || 'unknown',
-      knowledgeBaseId: BOTPRESS_KNOWLEDGE_BASE_ID,
-      uploadedAt: uploadTimestamp,
-      message: `File uploaded successfully to knowledge base ${BOTPRESS_KNOWLEDGE_BASE_ID}`
-    };
-
-    console.log(`🎉 UPLOAD COMPLETE for ${file.originalname} at ${new Date().toISOString()}`);
-    res.json(successResponse);
-
-  } catch (error) {
-    console.error('❌ DOCUMENT UPLOAD ERROR:', error);
-    
-    // No file cleanup needed - using memory storage
-
-    res.status(500).json({ 
-      error: 'Failed to upload document',
-      details: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// List uploaded documents endpoint
-app.get('/api/list-documents', async (req, res) => {
-  try {
-    console.log(`📋 LISTING DOCUMENTS from Botpress API...`);
-    
-    // Note: Botpress doesn't have a direct "list files" endpoint in the current API
-    // This would require implementing a local database to track uploaded files
-    // For now, return a placeholder response
-    res.json({
-      success: true,
-      message: 'Document listing not yet implemented',
-      note: 'Files are uploaded to Botpress knowledge base and automatically indexed'
-    });
-    
-  } catch (error) {
-    console.error('❌ Error listing documents:', error);
-    res.status(500).json({ 
-      error: 'Failed to list documents',
-      details: error.message 
-    });
-  }
 });
 
 // Health check endpoint
