@@ -803,6 +803,85 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
+// Test token permissions endpoint
+app.get('/api/test-permissions', async (req, res) => {
+  try {
+    console.log('🔑 Testing token permissions...');
+    
+    const results = {};
+    
+    // Test 1: Files API (we know this works)
+    console.log(`🔍 Test 1: Files API...`);
+    const filesResponse = await fetch('https://api.botpress.cloud/v1/files', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.files = { status: filesResponse.status, ok: filesResponse.ok };
+    
+    // Test 2: Try to get user info (to see what permissions the token has)
+    console.log(`🔍 Test 2: User info...`);
+    const userResponse = await fetch('https://api.botpress.cloud/v1/users/me', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.user = { status: userResponse.status, ok: userResponse.ok, data: userResponse.ok ? await userResponse.json() : null };
+    
+    // Test 3: Try to get workspace info
+    console.log(`🔍 Test 3: Workspace info...`);
+    const workspaceResponse = await fetch(`https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.workspace = { status: workspaceResponse.status, ok: workspaceResponse.ok, data: workspaceResponse.ok ? await workspaceResponse.json() : null };
+    
+    // Test 4: Try to get bot info
+    console.log(`🔍 Test 4: Bot info...`);
+    const botResponse = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.bot = { status: botResponse.status, ok: botResponse.ok, data: botResponse.ok ? await botResponse.json() : null };
+    
+    // Test 5: Try a different knowledge base endpoint structure
+    console.log(`🔍 Test 5: Alternative KB endpoint...`);
+    const kbResponse = await fetch(`https://api.botpress.cloud/v1/knowledge-bases`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.knowledgeBases = { status: kbResponse.status, ok: kbResponse.ok, data: kbResponse.ok ? await kbResponse.json() : null };
+    
+    res.json({ 
+      success: true,
+      message: 'Permission test completed',
+      results: results,
+      tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+    });
+  }
+});
+
 // Debug endpoint to check environment variables
 app.get('/api/debug-env', async (req, res) => {
   res.json({
