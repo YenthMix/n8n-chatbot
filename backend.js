@@ -810,72 +810,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// Test Knowledge Base API structure
-app.get('/api/test-kb-structure', async (req, res) => {
-  try {
-    console.log('🔍 Testing Knowledge Base API structure...');
-    
-    const results = {};
-    
-    // Test 1: Try to list knowledge bases first
-    console.log(`🔍 Test 1: List knowledge bases...`);
-    try {
-      const kbListResponse = await axios.get('https://api.botpress.cloud/v1/knowledge-bases', {
-        headers: {
-          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-          'x-bot-id': BOT_ID,
-          'Content-Type': 'application/json'
-        }
-      });
-      results.kbList = { status: kbListResponse.status, data: kbListResponse.data };
-      console.log(`✅ Found knowledge bases:`, kbListResponse.data);
-    } catch (error) {
-      results.kbList = { error: error.response?.status || error.message };
-      console.log(`❌ Failed to list KBs:`, error.response?.status || error.message);
-    }
-    
-    // Test 2: Try different endpoint structures
-    const testEndpoints = [
-      'https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f',
-      'https://api.botpress.cloud/v1/knowledge-bases/bfdcb1988f',
-      `https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases`,
-      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases`,
-      'https://api.botpress.cloud/v1/knowledge-bases'
-    ];
-    
-    for (let i = 0; i < testEndpoints.length; i++) {
-      const endpoint = testEndpoints[i];
-      console.log(`🔍 Test ${i + 2}: ${endpoint}`);
-      try {
-        const response = await axios.get(endpoint, {
-          headers: {
-            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-            'x-bot-id': BOT_ID,
-            'Content-Type': 'application/json'
-          }
-        });
-        results[`endpoint${i + 2}`] = { status: response.status, data: response.data };
-        console.log(`✅ Endpoint ${i + 2} works:`, response.status);
-      } catch (error) {
-        results[`endpoint${i + 2}`] = { error: error.response?.status || error.message };
-        console.log(`❌ Endpoint ${i + 2} failed:`, error.response?.status || error.message);
-      }
-    }
-    
-    res.json({ 
-      success: true,
-      message: 'Knowledge Base API structure test completed',
-      results: results
-    });
-    
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message
-    });
-  }
-});
-
 // Comprehensive Knowledge Base API diagnostic
 app.get('/api/test-kb-comprehensive', async (req, res) => {
   try {
@@ -1010,6 +944,123 @@ app.get('/api/test-kb-comprehensive', async (req, res) => {
     res.json({ 
       success: true,
       message: 'Comprehensive Knowledge Base API diagnostic completed',
+      results: results,
+      config: {
+        botId: BOT_ID,
+        workspaceId: WORKSPACE_ID,
+        tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message
+    });
+  }
+});
+
+// Advanced Knowledge Base Discovery
+app.get('/api/discover-kb', async (req, res) => {
+  try {
+    console.log('🔍 Advanced Knowledge Base Discovery...');
+    
+    const results = {};
+    
+    // Test 1: Check if knowledge base is accessed through different paths
+    console.log(`🔍 Test 1: Check alternative knowledge base paths...`);
+    const alternativePaths = [
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/config`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/config`,
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/settings`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/settings`,
+      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/bots/${BOT_ID}`,
+      `https://api.botpress.cloud/v3/workspaces/${WORKSPACE_ID}/bots/${BOT_ID}`,
+      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/config`,
+      `https://api.botpress.cloud/v3/workspaces/${WORKSPACE_ID}/config`
+    ];
+    
+    for (let i = 0; i < alternativePaths.length; i++) {
+      const path = alternativePaths[i];
+      console.log(`🔍 Test 1.${i + 1}: ${path}`);
+      try {
+        const response = await axios.get(path, {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        results[`altPath${i + 1}`] = { status: response.status, data: response.data, path };
+        console.log(`✅ Alternative path ${i + 1} works:`, response.status);
+      } catch (error) {
+        results[`altPath${i + 1}`] = { error: error.response?.status || error.message, path };
+        console.log(`❌ Alternative path ${i + 1} failed:`, error.response?.status || error.message);
+      }
+    }
+    
+    // Test 2: Try different knowledge base endpoint structures
+    console.log(`🔍 Test 2: Try different KB endpoint structures...`);
+    const kbEndpoints = [
+      `https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f`,
+      `https://api.botpress.cloud/v3/knowledge-bases/kb-bfdcb1988f`,
+      `https://api.botpress.cloud/v1/knowledge-bases/bfdcb1988f`,
+      `https://api.botpress.cloud/v3/knowledge-bases/bfdcb1988f`,
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases/kb-bfdcb1988f`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/knowledge-bases/kb-bfdcb1988f`,
+      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases/kb-bfdcb1988f`,
+      `https://api.botpress.cloud/v3/workspaces/${WORKSPACE_ID}/knowledge-bases/kb-bfdcb1988f`
+    ];
+    
+    for (let i = 0; i < kbEndpoints.length; i++) {
+      const endpoint = kbEndpoints[i];
+      console.log(`🔍 Test 2.${i + 1}: ${endpoint}`);
+      try {
+        const response = await axios.get(endpoint, {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        results[`kbEndpoint${i + 1}`] = { status: response.status, data: response.data, endpoint };
+        console.log(`✅ KB endpoint ${i + 1} works:`, response.status);
+      } catch (error) {
+        results[`kbEndpoint${i + 1}`] = { error: error.response?.status || error.message, endpoint };
+        console.log(`❌ KB endpoint ${i + 1} failed:`, error.response?.status || error.message);
+      }
+    }
+    
+    // Test 3: Try to find knowledge base through bot's modules or features
+    console.log(`🔍 Test 3: Check bot modules and features...`);
+    const moduleEndpoints = [
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/modules`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/modules`,
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/features`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/features`,
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/integrations`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/integrations`
+    ];
+    
+    for (let i = 0; i < moduleEndpoints.length; i++) {
+      const endpoint = moduleEndpoints[i];
+      console.log(`🔍 Test 3.${i + 1}: ${endpoint}`);
+      try {
+        const response = await axios.get(endpoint, {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        results[`moduleEndpoint${i + 1}`] = { status: response.status, data: response.data, endpoint };
+        console.log(`✅ Module endpoint ${i + 1} works:`, response.status);
+      } catch (error) {
+        results[`moduleEndpoint${i + 1}`] = { error: error.response?.status || error.message, endpoint };
+        console.log(`❌ Module endpoint ${i + 1} failed:`, error.response?.status || error.message);
+      }
+    }
+    
+    res.json({ 
+      success: true,
+      message: 'Advanced Knowledge Base Discovery completed',
       results: results,
       config: {
         botId: BOT_ID,
