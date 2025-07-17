@@ -1194,9 +1194,20 @@ app.use((err, req, res, next) => {
   }
 });
 
+// Simple health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔧 Debug endpoint: http://localhost:${PORT}/api/debug/stored-responses`);
+  console.log(`🔑 Token test: http://localhost:${PORT}/api/test-specific-token`);
 }); 
