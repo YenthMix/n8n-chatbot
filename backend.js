@@ -722,6 +722,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         }
       });
 
+      const registerData = registerRes.data;
       const fileObj = registerData.file || registerData;
       const uploadUrl = fileObj.uploadUrl;
       const fileId = fileObj.id;
