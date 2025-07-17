@@ -855,16 +855,49 @@ app.get('/api/test-permissions', async (req, res) => {
     });
     results.bot = { status: botResponse.status, ok: botResponse.ok, data: botResponse.ok ? await botResponse.json() : null };
     
-    // Test 5: Try a different knowledge base endpoint structure
-    console.log(`🔍 Test 5: Alternative KB endpoint...`);
-    const kbResponse = await fetch(`https://api.botpress.cloud/v1/knowledge-bases`, {
+    // Test 5: Try different knowledge base endpoint structures
+    console.log(`🔍 Test 5: Testing different KB endpoints...`);
+    
+    // Test 5a: List all knowledge bases
+    const kbResponse1 = await fetch(`https://api.botpress.cloud/v1/knowledge-bases`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
         'Content-Type': 'application/json'
       }
     });
-    results.knowledgeBases = { status: kbResponse.status, ok: kbResponse.ok, data: kbResponse.ok ? await kbResponse.json() : null };
+    results.knowledgeBases1 = { status: kbResponse1.status, ok: kbResponse1.ok, data: kbResponse1.ok ? await kbResponse1.json() : null };
+    
+    // Test 5b: Try with bot ID header
+    const kbResponse2 = await fetch(`https://api.botpress.cloud/v1/knowledge-bases`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.knowledgeBases2 = { status: kbResponse2.status, ok: kbResponse2.ok, data: kbResponse2.ok ? await kbResponse2.json() : null };
+    
+    // Test 5c: Try workspace-specific endpoint
+    const kbResponse3 = await fetch(`https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.knowledgeBases3 = { status: kbResponse3.status, ok: kbResponse3.ok, data: kbResponse3.ok ? await kbResponse3.json() : null };
+    
+    // Test 5d: Try bot-specific endpoint
+    const kbResponse4 = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.knowledgeBases4 = { status: kbResponse4.status, ok: kbResponse4.ok, data: kbResponse4.ok ? await kbResponse4.json() : null };
     
     res.json({ 
       success: true,
