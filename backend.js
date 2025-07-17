@@ -848,10 +848,10 @@ app.get('/api/test-token', async (req, res) => {
       data: kbResponse.ok ? await kbResponse.json() : null
     };
     
-    // Test 2: Try different API endpoint structures
-    console.log(`🔍 Test 2: Testing different API endpoints...`);
+    // Test 2: Try different API endpoint structures and HTTP methods
+    console.log(`🔍 Test 2: Testing different API endpoints and HTTP methods...`);
     
-    // Test 2a: Original endpoint with x-bot-id
+    // Test 2a: GET with x-bot-id
     const test2a = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
       method: 'GET',
       headers: {
@@ -860,40 +860,43 @@ app.get('/api/test-token', async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
-    results.endpoint2a = { status: test2a.status, ok: test2a.ok };
+    results.endpoint2a = { method: 'GET', status: test2a.status, ok: test2a.ok };
     
-    // Test 2b: Without x-bot-id header
+    // Test 2b: POST with x-bot-id (maybe it's a POST endpoint)
     const test2b = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ test: true })
+    });
+    results.endpoint2b = { method: 'POST', status: test2b.status, ok: test2b.ok };
+    
+    // Test 2c: GET without x-bot-id
+    const test2c = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
         'Content-Type': 'application/json'
       }
     });
-    results.endpoint2b = { status: test2b.status, ok: test2b.ok };
+    results.endpoint2c = { method: 'GET', status: test2c.status, ok: test2c.ok };
     
-    // Test 2c: With workspace in URL
-    const test2c = await fetch(`https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases/kb-bfdcb1988f/documents`, {
-      method: 'GET',
+    // Test 2d: POST without x-bot-id
+    const test2d = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({ test: true })
     });
-    results.endpoint2c = { status: test2c.status, ok: test2c.ok };
+    results.endpoint2d = { method: 'POST', status: test2d.status, ok: test2d.ok };
     
-    // Test 2d: Bot-based endpoint
-    const test2d = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases/kb-bfdcb1988f/documents`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    results.endpoint2d = { status: test2d.status, ok: test2d.ok };
-    
-    // Test 2e: Try with different knowledge base ID format
-    const test2e = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/bfdcb1988f/documents`, {
+    // Test 2e: Try to list all knowledge bases first
+    const test2e = await fetch(`https://api.botpress.cloud/v1/knowledge-bases`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
@@ -901,15 +904,37 @@ app.get('/api/test-token', async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
-    results.endpoint2e = { status: test2e.status, ok: test2e.ok };
+    results.endpoint2e = { method: 'GET', status: test2e.status, ok: test2e.ok, data: test2e.ok ? await test2e.json() : null };
+    
+    // Test 2f: Try workspace-based knowledge bases
+    const test2f = await fetch(`https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.endpoint2f = { method: 'GET', status: test2f.status, ok: test2f.ok, data: test2f.ok ? await test2f.json() : null };
+    
+    // Test 2g: Try bot-based knowledge bases
+    const test2g = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.endpoint2g = { method: 'GET', status: test2g.status, ok: test2g.ok, data: test2g.ok ? await test2g.json() : null };
     
     // Find the first working endpoint
     let workingEndpoint = null;
-    if (test2a.ok) workingEndpoint = '2a (original with x-bot-id)';
-    else if (test2b.ok) workingEndpoint = '2b (without x-bot-id)';
-    else if (test2c.ok) workingEndpoint = '2c (workspace in URL)';
-    else if (test2d.ok) workingEndpoint = '2d (bot-based)';
-    else if (test2e.ok) workingEndpoint = '2e (different KB ID format)';
+    if (test2a.ok) workingEndpoint = '2a (GET with x-bot-id)';
+    else if (test2b.ok) workingEndpoint = '2b (POST with x-bot-id)';
+    else if (test2c.ok) workingEndpoint = '2c (GET without x-bot-id)';
+    else if (test2d.ok) workingEndpoint = '2d (POST without x-bot-id)';
+    else if (test2e.ok) workingEndpoint = '2e (list all KBs)';
+    else if (test2f.ok) workingEndpoint = '2f (workspace KBs)';
+    else if (test2g.ok) workingEndpoint = '2g (bot KBs)';
     
     res.json({ 
       success: workingEndpoint !== null,
