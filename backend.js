@@ -876,6 +876,143 @@ app.get('/api/test-kb-structure', async (req, res) => {
   }
 });
 
+// Comprehensive Knowledge Base API diagnostic
+app.get('/api/test-kb-comprehensive', async (req, res) => {
+  try {
+    console.log('🔍 Comprehensive Knowledge Base API diagnostic...');
+    
+    const results = {};
+    
+    // Test 1: Get bot configuration to see if knowledge base is configured
+    console.log(`🔍 Test 1: Get bot configuration...`);
+    try {
+      const botConfigResponse = await axios.get(`https://api.botpress.cloud/v1/bots/${BOT_ID}`, {
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      results.botConfig = { status: botConfigResponse.status, data: botConfigResponse.data };
+      console.log(`✅ Bot config:`, botConfigResponse.data);
+    } catch (error) {
+      results.botConfig = { error: error.response?.status || error.message };
+      console.log(`❌ Bot config failed:`, error.response?.status || error.message);
+    }
+    
+    // Test 2: Try different API versions
+    console.log(`🔍 Test 2: Try different API versions...`);
+    const apiVersions = ['v1', 'v2', 'v3'];
+    for (const version of apiVersions) {
+      try {
+        const response = await axios.get(`https://api.botpress.cloud/${version}/knowledge-bases`, {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        results[`api${version}`] = { status: response.status, data: response.data };
+        console.log(`✅ API ${version} works:`, response.status);
+      } catch (error) {
+        results[`api${version}`] = { error: error.response?.status || error.message };
+        console.log(`❌ API ${version} failed:`, error.response?.status || error.message);
+      }
+    }
+    
+    // Test 3: Try different endpoint patterns
+    console.log(`🔍 Test 3: Try different endpoint patterns...`);
+    const patterns = [
+      'https://api.botpress.cloud/v1/knowledge-bases',
+      'https://api.botpress.cloud/v1/knowledge-base',
+      'https://api.botpress.cloud/v1/knowledgebases',
+      'https://api.botpress.cloud/v1/knowledgebase',
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases`,
+      `https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-base`,
+      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases`,
+      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-base`
+    ];
+    
+    for (let i = 0; i < patterns.length; i++) {
+      const pattern = patterns[i];
+      console.log(`🔍 Test 3.${i + 1}: ${pattern}`);
+      try {
+        const response = await axios.get(pattern, {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        results[`pattern${i + 1}`] = { status: response.status, data: response.data };
+        console.log(`✅ Pattern ${i + 1} works:`, response.status);
+      } catch (error) {
+        results[`pattern${i + 1}`] = { error: error.response?.status || error.message };
+        console.log(`❌ Pattern ${i + 1} failed:`, error.response?.status || error.message);
+      }
+    }
+    
+    // Test 4: Try with different headers
+    console.log(`🔍 Test 4: Try with different headers...`);
+    const headerTests = [
+      { name: 'with-bot-id', headers: { 'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`, 'x-bot-id': BOT_ID, 'Content-Type': 'application/json' } },
+      { name: 'with-workspace-id', headers: { 'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`, 'x-workspace-id': WORKSPACE_ID, 'Content-Type': 'application/json' } },
+      { name: 'with-both-ids', headers: { 'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`, 'x-bot-id': BOT_ID, 'x-workspace-id': WORKSPACE_ID, 'Content-Type': 'application/json' } },
+      { name: 'minimal-headers', headers: { 'Authorization': `Bearer ${BOTPRESS_API_TOKEN}` } }
+    ];
+    
+    for (let i = 0; i < headerTests.length; i++) {
+      const test = headerTests[i];
+      console.log(`🔍 Test 4.${i + 1}: ${test.name}`);
+      try {
+        const response = await axios.get('https://api.botpress.cloud/v1/knowledge-bases', {
+          headers: test.headers
+        });
+        results[`headers${i + 1}`] = { status: response.status, data: response.data, headers: test.name };
+        console.log(`✅ Headers ${i + 1} (${test.name}) works:`, response.status);
+      } catch (error) {
+        results[`headers${i + 1}`] = { error: error.response?.status || error.message, headers: test.name };
+        console.log(`❌ Headers ${i + 1} (${test.name}) failed:`, error.response?.status || error.message);
+      }
+    }
+    
+    // Test 5: Check if knowledge base exists by trying to get specific KB
+    console.log(`🔍 Test 5: Check specific knowledge base...`);
+    const kbIds = ['kb-bfdcb1988f', 'bfdcb1988f', 'kb-bfdcb1988f-documents', 'bfdcb1988f-documents'];
+    for (let i = 0; i < kbIds.length; i++) {
+      const kbId = kbIds[i];
+      console.log(`🔍 Test 5.${i + 1}: KB ID ${kbId}`);
+      try {
+        const response = await axios.get(`https://api.botpress.cloud/v1/knowledge-bases/${kbId}`, {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        results[`kbId${i + 1}`] = { status: response.status, data: response.data, kbId };
+        console.log(`✅ KB ID ${i + 1} (${kbId}) works:`, response.status);
+      } catch (error) {
+        results[`kbId${i + 1}`] = { error: error.response?.status || error.message, kbId };
+        console.log(`❌ KB ID ${i + 1} (${kbId}) failed:`, error.response?.status || error.message);
+      }
+    }
+    
+    res.json({ 
+      success: true,
+      message: 'Comprehensive Knowledge Base API diagnostic completed',
+      results: results,
+      config: {
+        botId: BOT_ID,
+        workspaceId: WORKSPACE_ID,
+        tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message
+    });
+  }
+});
+
 // Test specific token endpoint
 app.get('/api/test-specific-token', async (req, res) => {
   try {
