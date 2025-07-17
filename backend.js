@@ -85,7 +85,7 @@ app.use((req, res, next) => {
 
 // Load secrets from .env file
 const API_ID = process.env.API_ID;
-const BOTPRESS_API_TOKEN = process.env.BOTPRESS_BEARER_TOKEN|| 'bp_pat_AHv8x7iVbfI1a7a8wi8ni6adoURfVT9pMd31';
+const BOTPRESS_API_TOKEN = process.env.BOTPRESS_BEARER_TOKEN|| 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
 const BOT_ID = process.env.BOTPRESS_BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
 const WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID || 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET';
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
@@ -799,6 +799,64 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     }
     res.status(500).json({ 
       error: error.message || 'Failed to upload file to knowledge base' 
+    });
+  }
+});
+
+// Test specific token endpoint
+app.get('/api/test-specific-token', async (req, res) => {
+  try {
+    const testToken = req.query.token || BOTPRESS_API_TOKEN;
+    console.log('🔑 Testing specific token...');
+    console.log(`   Token: ${testToken ? testToken.substring(0, 20) + '...' : 'NOT SET'}`);
+    
+    const results = {};
+    
+    // Test 1: Files API
+    console.log(`🔍 Test 1: Files API...`);
+    const filesResponse = await fetch('https://api.botpress.cloud/v1/files', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${testToken}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.files = { status: filesResponse.status, ok: filesResponse.ok };
+    
+    // Test 2: Knowledge Bases
+    console.log(`🔍 Test 2: Knowledge Bases...`);
+    const kbResponse = await fetch('https://api.botpress.cloud/v1/knowledge-bases', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${testToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.knowledgeBases = { status: kbResponse.status, ok: kbResponse.ok, data: kbResponse.ok ? await kbResponse.json() : null };
+    
+    // Test 3: User info
+    console.log(`🔍 Test 3: User info...`);
+    const userResponse = await fetch('https://api.botpress.cloud/v1/users/me', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${testToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    results.user = { status: userResponse.status, ok: userResponse.ok, data: userResponse.ok ? await userResponse.json() : null };
+    
+    res.json({ 
+      success: true,
+      message: 'Specific token test completed',
+      results: results,
+      tokenPreview: testToken ? testToken.substring(0, 20) + '...' : 'NOT SET'
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message
     });
   }
 });
