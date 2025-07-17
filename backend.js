@@ -85,6 +85,9 @@ app.use((req, res, next) => {
 
 // Load secrets from .env file
 const API_ID = process.env.API_ID;
+const BOTPRESS_API_TOKEN = process.env.BOTPRESS_API_TOKEN || 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
+const BOT_ID = process.env.BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
+const WORKSPACE_ID = process.env.WORKSPACE_ID || 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET';
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 
@@ -688,8 +691,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const registerRes = await fetch('https://api.botpress.cloud/v1/files', {
       method: 'PUT',
       headers: {
-        'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
-        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155',
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -740,15 +743,15 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const knowledgeBaseResponse = await fetch('https://api.botpress.cloud/v1/knowledge_bases/kb-bfdcb1988f/documents', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI',
-        'x-bot-id': '73dfb145-f1c3-451f-b7c8-ed463a9dd155',
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         name: req.file.originalname,
         type: 'file',
         fileId: fileId,
-        workspaceId: process.env.WORKSPACE_ID
+        workspaceId: WORKSPACE_ID
       })
     });
 

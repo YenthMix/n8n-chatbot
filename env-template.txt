@@ -1,0 +1,18 @@
+# Botpress API Configuration
+# Copy this to .env file and replace with your actual values
+
+# Your Botpress API Token (Personal Access Token)
+# Get this from: https://studio.botpress.cloud → Profile → API Keys
+BOTPRESS_API_TOKEN=bp_pat_your_new_token_here
+
+# Your Bot ID (found in Botpress Studio under your bot)
+BOT_ID=73dfb145-f1c3-451f-b7c8-ed463a9dd155
+
+# Your Workspace ID (found in Botpress Studio URL or workspace settings)
+WORKSPACE_ID=wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET
+
+# Your Botpress Chat API ID
+API_ID=your_chat_api_id_here
+
+# Server Configuration
+PORT=3001 
