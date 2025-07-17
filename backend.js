@@ -747,7 +747,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       body: JSON.stringify({
         name: req.file.originalname,
         type: 'file',
-        fileId: fileId
+        fileId: fileId,
+        workspaceId: process.env.WORKSPACE_ID
       })
     });
 
