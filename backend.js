@@ -741,8 +741,49 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
       // Step 3: Add file to knowledge base
       console.log(`📚 Adding file to knowledge base...`);
+      
+      // First, let's check what knowledge bases are available
+      console.log(`🔍 Checking available knowledge bases...`);
+      let knowledgeBaseId = null;
+      
+      try {
+        // Try to list knowledge bases
+        const kbListResponse = await axios.get('https://api.botpress.cloud/v1/knowledge-bases', {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (kbListResponse.data && kbListResponse.data.length > 0) {
+          // Use the first available knowledge base
+          knowledgeBaseId = kbListResponse.data[0].id;
+          console.log(`✅ Found knowledge base: ${knowledgeBaseId}`);
+        } else {
+          console.log(`⚠️ No knowledge bases found, trying to create one...`);
+          // Try to create a knowledge base
+          const createKbResponse = await axios.post('https://api.botpress.cloud/v1/knowledge-bases', {
+            name: 'Documents',
+            description: 'Knowledge base for uploaded documents'
+          }, {
+            headers: {
+              'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          knowledgeBaseId = createKbResponse.data.id;
+          console.log(`✅ Created new knowledge base: ${knowledgeBaseId}`);
+        }
+      } catch (error) {
+        console.log(`❌ Failed to get/create knowledge base:`, error.response?.status || error.message);
+        // Fall back to the hardcoded ID
+        knowledgeBaseId = 'kb-bfdcb1988f';
+        console.log(`🔄 Falling back to hardcoded knowledge base ID: ${knowledgeBaseId}`);
+      }
+      
       console.log(`🔍 DEBUG - Knowledge Base API call:`);
-      console.log(`   URL: https://api.botpress.cloud/v3/knowledge-bases/kb-bfdcb1988f/documents`);
+      console.log(`   URL: https://api.botpress.cloud/v3/knowledge-bases/${knowledgeBaseId}/documents`);
       console.log(`   Authorization: Bearer ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
       console.log(`   x-bot-id: ${BOT_ID}`);
       console.log(`   Request body:`, {
@@ -752,7 +793,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         workspaceId: WORKSPACE_ID
       });
 
-      const knowledgeBaseResponse = await axios.post(`https://api.botpress.cloud/v3/knowledge-bases/kb-bfdcb1988f/documents`, {
+      const knowledgeBaseResponse = await axios.post(`https://api.botpress.cloud/v3/knowledge-bases/${knowledgeBaseId}/documents`, {
         name: req.file.originalname,
         type: 'file',
         fileId: fileId,
