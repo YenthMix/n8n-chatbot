@@ -85,7 +85,7 @@ app.use((req, res, next) => {
 
 // Load secrets from .env file
 const API_ID = process.env.API_ID;
-const BOTPRESS_API_TOKEN = process.env.BOTPRESS_BEARER_TOKEN|| 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
+const BOTPRESS_API_TOKEN = process.env.BOTPRESS_BEARER_TOKEN|| 'bp_pat_AHv8x7iVbfI1a7a8wi8ni6adoURfVT9pMd31';
 const BOT_ID = process.env.BOTPRESS_BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
 const WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID || 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET';
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
