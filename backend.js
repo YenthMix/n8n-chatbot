@@ -755,16 +755,18 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     // Step 3: Add file to knowledge base
     console.log(`📚 Adding file to knowledge base...`);
-    const knowledgeBaseResponse = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases/kb-bfdcb1988f/documents`, {
+    const knowledgeBaseResponse = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         name: req.file.originalname,
         type: 'file',
-        fileId: fileId
+        fileId: fileId,
+        workspaceId: WORKSPACE_ID
       })
     });
 
@@ -827,30 +829,32 @@ app.get('/api/test-token', async (req, res) => {
     console.log(`   Bot ID: ${BOT_ID}`);
     console.log(`   Workspace ID: ${WORKSPACE_ID}`);
     
-    // Test 1: Try to list bots first
-    console.log(`🔍 Test 1: Listing bots...`);
-    const botsResponse = await fetch('https://api.botpress.cloud/v1/bots', {
+    // Test 1: Try to get knowledge base info directly
+    console.log(`🔍 Test 1: Getting knowledge base info...`);
+    const kbResponse = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
         'Content-Type': 'application/json'
       }
     });
     
-    let bots = [];
-    if (botsResponse.ok) {
-      bots = await botsResponse.json();
-      console.log(`✅ Found ${bots.length} bots`);
+    let kbInfo = null;
+    if (kbResponse.ok) {
+      kbInfo = await kbResponse.json();
+      console.log(`✅ Found knowledge base: ${kbInfo.name || 'Unknown'}`);
     } else {
-      console.log(`❌ Failed to list bots: ${botsResponse.status}`);
+      console.log(`❌ Failed to get knowledge base info: ${kbResponse.status}`);
     }
     
-    // Test 2: Try to list knowledge bases for the specific bot
-    console.log(`🔍 Test 2: Testing with bot ID: ${BOT_ID}`);
-    const testResponse = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases`, {
+    // Test 2: Try to list documents in the knowledge base
+    console.log(`🔍 Test 2: Testing documents in knowledge base: kb-bfdcb1988f`);
+    const testResponse = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
         'Content-Type': 'application/json'
       }
     });
@@ -860,8 +864,8 @@ app.get('/api/test-token', async (req, res) => {
       res.json({ 
         success: true, 
         message: 'Token is valid!',
-        bots: bots,
-        knowledgeBases: data,
+        kbInfo: kbInfo,
+        documents: data,
         tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
       });
     } else {
@@ -870,8 +874,8 @@ app.get('/api/test-token', async (req, res) => {
         success: false, 
         error: `Token test failed: ${testResponse.status}`,
         details: errorText,
-        bots: bots,
-        botId: BOT_ID,
+        kbInfo: kbInfo,
+        kbId: 'kb-bfdcb1988f',
         tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
       });
     }
