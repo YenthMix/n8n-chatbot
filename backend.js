@@ -5,7 +5,7 @@
 
 require('dotenv').config();
 const express = require('express');
-const fetch = require('node-fetch');
+const axios = require('axios');
 const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
@@ -703,14 +703,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     console.log(`   Authorization: Bearer ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
     console.log(`   x-bot-id: ${BOT_ID}`);
     
-    const registerRes = await fetch('https://api.botpress.cloud/v1/files', {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-        'x-bot-id': BOT_ID,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    try {
+      const registerRes = await axios.put('https://api.botpress.cloud/v1/files', {
         key: fileKey,
         contentType: req.file.mimetype,
         size: req.file.size,
@@ -720,63 +714,75 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
           uploadedBy: 'webchat',
           originalName: req.file.originalname
         }
-      })
-    });
+      }, {
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+          'x-bot-id': BOT_ID,
+          'Content-Type': 'application/json'
+        }
+      });
 
-    if (!registerRes.ok) {
-      const errorText = await registerRes.text();
-      console.error(`❌ Botpress API error: ${registerRes.status} - ${errorText}`);
-      throw new Error(`Botpress API error: ${registerRes.status}`);
-    }
+      const fileObj = registerData.file || registerData;
+      const uploadUrl = fileObj.uploadUrl;
+      const fileId = fileObj.id;
+      if (!uploadUrl || !fileId) {
+        throw new Error('No uploadUrl or fileId in Botpress response');
+      }
+      console.log(`✅ File metadata registered. File ID: ${fileId}, Upload URL: ${uploadUrl}`);
 
-    const registerData = await registerRes.json();
-    const fileObj = registerData.file || registerData;
-    const uploadUrl = fileObj.uploadUrl;
-    const fileId = fileObj.id;
-    if (!uploadUrl || !fileId) {
-      throw new Error('No uploadUrl or fileId in Botpress response');
-    }
-    console.log(`✅ File metadata registered. File ID: ${fileId}, Upload URL: ${uploadUrl}`);
+      // Step 2: Upload file content to uploadUrl
+      const uploadRes = await axios.put(uploadUrl, fs.readFileSync(req.file.path), {
+        headers: {
+          'Content-Type': req.file.mimetype
+        }
+      });
+      console.log(`✅ File content uploaded to storage.`);
 
-    // Step 2: Upload file content to uploadUrl
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': req.file.mimetype
-      },
-      body: fs.readFileSync(req.file.path)
-    });
-    if (!uploadRes.ok) {
-      const uploadErrorText = await uploadRes.text();
-      console.error(`❌ File content upload error: ${uploadRes.status} - ${uploadErrorText}`);
-      throw new Error(`File content upload error: ${uploadRes.status}`);
-    }
-    console.log(`✅ File content uploaded to storage.`);
-
-    // Step 3: Add file to knowledge base
-    console.log(`📚 Adding file to knowledge base...`);
-    const knowledgeBaseResponse = await fetch(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-        'x-bot-id': BOT_ID,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+      // Step 3: Add file to knowledge base
+      console.log(`📚 Adding file to knowledge base...`);
+      console.log(`🔍 DEBUG - Knowledge Base API call:`);
+      console.log(`   URL: https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`);
+      console.log(`   Authorization: Bearer ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
+      console.log(`   x-bot-id: ${BOT_ID}`);
+      console.log(`   Request body:`, {
         name: req.file.originalname,
         type: 'file',
         fileId: fileId,
         workspaceId: WORKSPACE_ID
-      })
-    });
+      });
 
-    if (!knowledgeBaseResponse.ok) {
-      const kbErrorText = await knowledgeBaseResponse.text();
-      console.error(`❌ Knowledge base error: ${knowledgeBaseResponse.status} - ${kbErrorText}`);
-      throw new Error(`Knowledge base error: ${knowledgeBaseResponse.status}`);
+      const knowledgeBaseResponse = await axios.post(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
+        name: req.file.originalname,
+        type: 'file',
+        fileId: fileId,
+        workspaceId: WORKSPACE_ID
+      }, {
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+          'x-bot-id': BOT_ID,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const kbData = knowledgeBaseResponse.data;
+    } catch (error) {
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error(`❌ API Error: ${error.response.status} - ${error.response.statusText}`);
+        console.error(`❌ Response data:`, error.response.data);
+        console.error(`❌ Response headers:`, error.response.headers);
+        throw new Error(`${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error(`❌ No response received:`, error.request);
+        throw new Error('No response received from server');
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        console.error(`❌ Request setup error:`, error.message);
+        throw new Error(`Request error: ${error.message}`);
+      }
     }
-
-    const kbData = await knowledgeBaseResponse.json();
     console.log(`✅ File added to knowledge base successfully! Document ID: ${kbData.id || 'N/A'}`);
 
     // Clean up temporary file
