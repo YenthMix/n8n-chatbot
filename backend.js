@@ -86,7 +86,7 @@ app.use((req, res, next) => {
 // Load secrets from .env file
 const API_ID = process.env.API_ID;
 const BOTPRESS_API_TOKEN = process.env.BOTPRESS_API_TOKEN || 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
-const BOT_ID = process.env.BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
+const BOT_ID = process.env.BOTPRESS_BOT_ID || process.env.BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
 const WORKSPACE_ID = process.env.WORKSPACE_ID || 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET';
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
@@ -685,9 +685,24 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     console.log(`📁 File upload received: ${req.file.originalname} (${req.file.size} bytes)`);
     console.log(`📁 File type: ${req.file.mimetype}`);
+    
+    // Debug environment variables
+    console.log(`🔍 DEBUG - Environment variables:`);
+    console.log(`   BOTPRESS_API_TOKEN: ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
+    console.log(`   BOTPRESS_BOT_ID: ${process.env.BOTPRESS_BOT_ID || 'NOT SET'}`);
+    console.log(`   BOT_ID: ${process.env.BOT_ID || 'NOT SET'}`);
+    console.log(`   Using BOT_ID: ${BOT_ID}`);
+    console.log(`   WORKSPACE_ID: ${WORKSPACE_ID}`);
+    console.log(`   API_ID: ${API_ID || 'NOT SET'}`);
 
     // Step 1: Register file and get uploadUrl
     const fileKey = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log(`🔍 DEBUG - Files API call:`);
+    console.log(`   URL: https://api.botpress.cloud/v1/files`);
+    console.log(`   Authorization: Bearer ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
+    console.log(`   x-bot-id: ${BOT_ID}`);
+    
     const registerRes = await fetch('https://api.botpress.cloud/v1/files', {
       method: 'PUT',
       headers: {
@@ -784,6 +799,61 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     }
     res.status(500).json({ 
       error: error.message || 'Failed to upload file to knowledge base' 
+    });
+  }
+});
+
+// Debug endpoint to check environment variables
+app.get('/api/debug-env', async (req, res) => {
+  res.json({
+    BOTPRESS_API_TOKEN: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET',
+    BOTPRESS_BOT_ID: process.env.BOTPRESS_BOT_ID || 'NOT SET',
+    BOT_ID: process.env.BOT_ID || 'NOT SET',
+    WORKSPACE_ID: WORKSPACE_ID,
+    API_ID: API_ID || 'NOT SET',
+    NODE_ENV: process.env.NODE_ENV || 'NOT SET'
+  });
+});
+
+// Test endpoint to verify Botpress API token
+app.get('/api/test-token', async (req, res) => {
+  try {
+    console.log('🔑 Testing Botpress API token...');
+    console.log(`   Token: ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
+    console.log(`   Bot ID: ${BOT_ID}`);
+    console.log(`   Workspace ID: ${WORKSPACE_ID}`);
+    
+    // Test the token by listing knowledge bases
+    const testResponse = await fetch(`https://api.botpress.cloud/v1/knowledge_bases?workspaceId=${WORKSPACE_ID}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (testResponse.ok) {
+      const data = await testResponse.json();
+      res.json({ 
+        success: true, 
+        message: 'Token is valid!',
+        knowledgeBases: data,
+        tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+      });
+    } else {
+      const errorText = await testResponse.text();
+      res.status(testResponse.status).json({ 
+        success: false, 
+        error: `Token test failed: ${testResponse.status}`,
+        details: errorText,
+        tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
     });
   }
 });
