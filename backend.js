@@ -755,18 +755,16 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     // Step 3: Add file to knowledge base
     console.log(`📚 Adding file to knowledge base...`);
-    const knowledgeBaseResponse = await fetch('https://api.botpress.cloud/v1/knowledge_bases/kb-bfdcb1988f/documents', {
+    const knowledgeBaseResponse = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases/kb-bfdcb1988f/documents`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-        'x-bot-id': BOT_ID,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         name: req.file.originalname,
         type: 'file',
-        fileId: fileId,
-        workspaceId: WORKSPACE_ID
+        fileId: fileId
       })
     });
 
@@ -829,9 +827,9 @@ app.get('/api/test-token', async (req, res) => {
     console.log(`   Bot ID: ${BOT_ID}`);
     console.log(`   Workspace ID: ${WORKSPACE_ID}`);
     
-    // Test 1: Try to list all workspaces first
-    console.log(`🔍 Test 1: Listing all workspaces...`);
-    const workspacesResponse = await fetch('https://api.botpress.cloud/v1/workspaces', {
+    // Test 1: Try to list bots first
+    console.log(`🔍 Test 1: Listing bots...`);
+    const botsResponse = await fetch('https://api.botpress.cloud/v1/bots', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
@@ -839,17 +837,17 @@ app.get('/api/test-token', async (req, res) => {
       }
     });
     
-    let workspaces = [];
-    if (workspacesResponse.ok) {
-      workspaces = await workspacesResponse.json();
-      console.log(`✅ Found ${workspaces.length} workspaces`);
+    let bots = [];
+    if (botsResponse.ok) {
+      bots = await botsResponse.json();
+      console.log(`✅ Found ${bots.length} bots`);
     } else {
-      console.log(`❌ Failed to list workspaces: ${workspacesResponse.status}`);
+      console.log(`❌ Failed to list bots: ${botsResponse.status}`);
     }
     
-    // Test 2: Try to list knowledge bases in the specific workspace
-    console.log(`🔍 Test 2: Testing with workspace ID: ${WORKSPACE_ID}`);
-    const testResponse = await fetch(`https://api.botpress.cloud/v1/knowledge_bases?workspaceId=${WORKSPACE_ID}`, {
+    // Test 2: Try to list knowledge bases for the specific bot
+    console.log(`🔍 Test 2: Testing with bot ID: ${BOT_ID}`);
+    const testResponse = await fetch(`https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
@@ -862,7 +860,7 @@ app.get('/api/test-token', async (req, res) => {
       res.json({ 
         success: true, 
         message: 'Token is valid!',
-        workspaces: workspaces,
+        bots: bots,
         knowledgeBases: data,
         tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
       });
@@ -872,8 +870,8 @@ app.get('/api/test-token', async (req, res) => {
         success: false, 
         error: `Token test failed: ${testResponse.status}`,
         details: errorText,
-        workspaces: workspaces,
-        workspaceId: WORKSPACE_ID,
+        bots: bots,
+        botId: BOT_ID,
         tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
       });
     }
