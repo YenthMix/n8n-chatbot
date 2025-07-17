@@ -1077,6 +1077,104 @@ app.get('/api/discover-kb', async (req, res) => {
   }
 });
 
+// Quick Bot Configuration Check
+app.get('/api/check-bot-config', async (req, res) => {
+  try {
+    console.log('🔍 Quick Bot Configuration Check...');
+    
+    const results = {};
+    
+    // Test 1: Get basic bot info
+    console.log(`🔍 Test 1: Get basic bot info...`);
+    try {
+      const botResponse = await axios.get(`https://api.botpress.cloud/v1/bots/${BOT_ID}`, {
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      results.botInfo = { status: botResponse.status, data: botResponse.data };
+      console.log(`✅ Bot info retrieved:`, botResponse.data);
+    } catch (error) {
+      results.botInfo = { error: error.response?.status || error.message };
+      console.log(`❌ Bot info failed:`, error.response?.status || error.message);
+    }
+    
+    // Test 2: Check if knowledge base is mentioned in bot config
+    if (results.botInfo && results.botInfo.data) {
+      console.log(`🔍 Test 2: Analyzing bot config for knowledge base...`);
+      const botData = results.botInfo.data;
+      const kbInfo = {
+        hasKnowledgeBase: false,
+        knowledgeBaseId: null,
+        knowledgeBaseConfig: null,
+        modules: null,
+        features: null
+      };
+      
+      // Check for knowledge base in various possible locations
+      if (botData.knowledgeBase) {
+        kbInfo.hasKnowledgeBase = true;
+        kbInfo.knowledgeBaseConfig = botData.knowledgeBase;
+      }
+      if (botData.knowledgeBaseId) {
+        kbInfo.hasKnowledgeBase = true;
+        kbInfo.knowledgeBaseId = botData.knowledgeBaseId;
+      }
+      if (botData.modules) {
+        kbInfo.modules = botData.modules;
+        // Check if knowledge base is in modules
+        if (botData.modules.some(module => module.name === 'knowledge-base' || module.type === 'knowledge-base')) {
+          kbInfo.hasKnowledgeBase = true;
+        }
+      }
+      if (botData.features) {
+        kbInfo.features = botData.features;
+        // Check if knowledge base is in features
+        if (botData.features.some(feature => feature.name === 'knowledge-base' || feature.type === 'knowledge-base')) {
+          kbInfo.hasKnowledgeBase = true;
+        }
+      }
+      
+      results.knowledgeBaseAnalysis = kbInfo;
+      console.log(`✅ Knowledge base analysis:`, kbInfo);
+    }
+    
+    // Test 3: Try to get workspace info
+    console.log(`🔍 Test 3: Get workspace info...`);
+    try {
+      const workspaceResponse = await axios.get(`https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}`, {
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      results.workspaceInfo = { status: workspaceResponse.status, data: workspaceResponse.data };
+      console.log(`✅ Workspace info retrieved:`, workspaceResponse.data);
+    } catch (error) {
+      results.workspaceInfo = { error: error.response?.status || error.message };
+      console.log(`❌ Workspace info failed:`, error.response?.status || error.message);
+    }
+    
+    res.json({ 
+      success: true,
+      message: 'Quick Bot Configuration Check completed',
+      results: results,
+      config: {
+        botId: BOT_ID,
+        workspaceId: WORKSPACE_ID,
+        tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message
+    });
+  }
+});
+
 // Test specific token endpoint
 app.get('/api/test-specific-token', async (req, res) => {
   try {
