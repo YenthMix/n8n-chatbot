@@ -85,9 +85,9 @@ app.use((req, res, next) => {
 
 // Load secrets from .env file
 const API_ID = process.env.API_ID;
-const BOTPRESS_API_TOKEN = process.env.BOTPRESS_API_TOKEN || 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
-const BOT_ID = process.env.BOTPRESS_BOT_ID || process.env.BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
-const WORKSPACE_ID = process.env.WORKSPACE_ID || 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET';
+const BOTPRESS_API_TOKEN = process.env.BOTPRESS_BEARER_TOKEN|| 'bp_pat_03bBjs1WlZgPvkP0vyjIYuW9hzxQ8JWMKgvI';
+const BOT_ID = process.env.BOTPRESS_BOT_ID || '73dfb145-f1c3-451f-b7c8-ed463a9dd155';
+const WORKSPACE_ID = process.env.BOTPRESS_WORKSPACE_ID || 'wkspace_01JV4D1D6V3ZZFWVDZJ8PYECET';
 const BASE_URL = `https://chat.botpress.cloud/${API_ID}`;
 
 
@@ -688,11 +688,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     
     // Debug environment variables
     console.log(`🔍 DEBUG - Environment variables:`);
-    console.log(`   BOTPRESS_API_TOKEN: ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
+    console.log(`   BOTPRESS_BEARER_TOKEN: ${process.env.BOTPRESS_BEARER_TOKEN ? process.env.BOTPRESS_BEARER_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
     console.log(`   BOTPRESS_BOT_ID: ${process.env.BOTPRESS_BOT_ID || 'NOT SET'}`);
-    console.log(`   BOT_ID: ${process.env.BOT_ID || 'NOT SET'}`);
+    console.log(`   BOTPRESS_WORKSPACE_ID: ${process.env.BOTPRESS_WORKSPACE_ID || 'NOT SET'}`);
     console.log(`   Using BOT_ID: ${BOT_ID}`);
-    console.log(`   WORKSPACE_ID: ${WORKSPACE_ID}`);
+    console.log(`   Using WORKSPACE_ID: ${WORKSPACE_ID}`);
     console.log(`   API_ID: ${API_ID || 'NOT SET'}`);
 
     // Step 1: Register file and get uploadUrl
@@ -806,12 +806,18 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 // Debug endpoint to check environment variables
 app.get('/api/debug-env', async (req, res) => {
   res.json({
-    BOTPRESS_API_TOKEN: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET',
+    BOTPRESS_BEARER_TOKEN: process.env.BOTPRESS_BEARER_TOKEN ? process.env.BOTPRESS_BEARER_TOKEN.substring(0, 20) + '...' : 'NOT SET',
     BOTPRESS_BOT_ID: process.env.BOTPRESS_BOT_ID || 'NOT SET',
-    BOT_ID: process.env.BOT_ID || 'NOT SET',
-    WORKSPACE_ID: WORKSPACE_ID,
+    BOTPRESS_WORKSPACE_ID: process.env.BOTPRESS_WORKSPACE_ID || 'NOT SET',
+    USING_TOKEN: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET',
+    USING_BOT_ID: BOT_ID,
+    USING_WORKSPACE_ID: WORKSPACE_ID,
     API_ID: API_ID || 'NOT SET',
-    NODE_ENV: process.env.NODE_ENV || 'NOT SET'
+    NODE_ENV: process.env.NODE_ENV || 'NOT SET',
+    // Raw values for debugging
+    RAW_BOTPRESS_BEARER_TOKEN: process.env.BOTPRESS_BEARER_TOKEN ? 'SET' : 'NOT SET',
+    RAW_BOTPRESS_BOT_ID: process.env.BOTPRESS_BOT_ID ? 'SET' : 'NOT SET',
+    RAW_BOTPRESS_WORKSPACE_ID: process.env.BOTPRESS_WORKSPACE_ID ? 'SET' : 'NOT SET'
   });
 });
 
@@ -824,6 +830,7 @@ app.get('/api/test-token', async (req, res) => {
     console.log(`   Workspace ID: ${WORKSPACE_ID}`);
     
     // Test the token by listing knowledge bases
+    console.log(`🔍 Testing with workspace ID: ${WORKSPACE_ID}`);
     const testResponse = await fetch(`https://api.botpress.cloud/v1/knowledge_bases?workspaceId=${WORKSPACE_ID}`, {
       method: 'GET',
       headers: {
