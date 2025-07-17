@@ -742,7 +742,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       // Step 3: Add file to knowledge base
       console.log(`📚 Adding file to knowledge base...`);
       console.log(`🔍 DEBUG - Knowledge Base API call:`);
-      console.log(`   URL: https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`);
+      console.log(`   URL: https://api.botpress.cloud/v3/knowledge-bases/kb-bfdcb1988f/documents`);
       console.log(`   Authorization: Bearer ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
       console.log(`   x-bot-id: ${BOT_ID}`);
       console.log(`   Request body:`, {
@@ -752,7 +752,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         workspaceId: WORKSPACE_ID
       });
 
-      const knowledgeBaseResponse = await axios.post(`https://api.botpress.cloud/v1/knowledge-bases/kb-bfdcb1988f/documents`, {
+      const knowledgeBaseResponse = await axios.post(`https://api.botpress.cloud/v3/knowledge-bases/kb-bfdcb1988f/documents`, {
         name: req.file.originalname,
         type: 'file',
         fileId: fileId,
@@ -925,10 +925,18 @@ app.get('/api/test-kb-comprehensive', async (req, res) => {
       'https://api.botpress.cloud/v1/knowledge-base',
       'https://api.botpress.cloud/v1/knowledgebases',
       'https://api.botpress.cloud/v1/knowledgebase',
+      'https://api.botpress.cloud/v3/knowledge-bases',
+      'https://api.botpress.cloud/v3/knowledge-base',
+      'https://api.botpress.cloud/v3/knowledgebases',
+      'https://api.botpress.cloud/v3/knowledgebase',
       `https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases`,
       `https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-base`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/knowledge-bases`,
+      `https://api.botpress.cloud/v3/bots/${BOT_ID}/knowledge-base`,
       `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases`,
-      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-base`
+      `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-base`,
+      `https://api.botpress.cloud/v3/workspaces/${WORKSPACE_ID}/knowledge-bases`,
+      `https://api.botpress.cloud/v3/workspaces/${WORKSPACE_ID}/knowledge-base`
     ];
     
     for (let i = 0; i < patterns.length; i++) {
@@ -976,21 +984,26 @@ app.get('/api/test-kb-comprehensive', async (req, res) => {
     // Test 5: Check if knowledge base exists by trying to get specific KB
     console.log(`🔍 Test 5: Check specific knowledge base...`);
     const kbIds = ['kb-bfdcb1988f', 'bfdcb1988f', 'kb-bfdcb1988f-documents', 'bfdcb1988f-documents'];
-    for (let i = 0; i < kbIds.length; i++) {
-      const kbId = kbIds[i];
-      console.log(`🔍 Test 5.${i + 1}: KB ID ${kbId}`);
-      try {
-        const response = await axios.get(`https://api.botpress.cloud/v1/knowledge-bases/${kbId}`, {
-          headers: {
-            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        results[`kbId${i + 1}`] = { status: response.status, data: response.data, kbId };
-        console.log(`✅ KB ID ${i + 1} (${kbId}) works:`, response.status);
-      } catch (error) {
-        results[`kbId${i + 1}`] = { error: error.response?.status || error.message, kbId };
-        console.log(`❌ KB ID ${i + 1} (${kbId}) failed:`, error.response?.status || error.message);
+    const apiVersionsForKb = ['v1', 'v3'];
+    
+    for (const version of apiVersionsForKb) {
+      for (let i = 0; i < kbIds.length; i++) {
+        const kbId = kbIds[i];
+        const testKey = `kbId_${version}_${i + 1}`;
+        console.log(`🔍 Test 5.${testKey}: KB ID ${kbId} with API ${version}`);
+        try {
+          const response = await axios.get(`https://api.botpress.cloud/${version}/knowledge-bases/${kbId}`, {
+            headers: {
+              'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          results[testKey] = { status: response.status, data: response.data, kbId, version };
+          console.log(`✅ KB ID ${testKey} (${kbId}) with API ${version} works:`, response.status);
+        } catch (error) {
+          results[testKey] = { error: error.response?.status || error.message, kbId, version };
+          console.log(`❌ KB ID ${testKey} (${kbId}) with API ${version} failed:`, error.response?.status || error.message);
+        }
       }
     }
     
