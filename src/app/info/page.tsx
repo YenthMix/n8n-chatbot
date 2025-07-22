@@ -20,39 +20,46 @@ export default function InfoPage() {
     }
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      setUploadMessage('Please select a file first');
-      return;
-    }
-
+  const handleUpload = async (file: File) => {
     setIsUploading(true);
-    setUploadMessage('Uploading...');
-
+    setUploadMessage('');
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        setUploadMessage('✅ File uploaded successfully to knowledge base!');
-        setSelectedFile(null);
-        // Reset file input
-        const fileInput = document.getElementById('file-input') as HTMLInputElement;
-        if (fileInput) fileInput.value = '';
+      // 1. Extract text from the file (simple example for .txt)
+      let extractedText = '';
+      if (file.type === 'text/plain') {
+        extractedText = await file.text();
       } else {
-        const errorData = await response.json();
-        setUploadMessage(`❌ Upload failed: ${errorData.error || 'Unknown error'}`);
+        setUploadMessage('❌ Only .txt files are supported in this demo.');
+        setIsUploading(false);
+        return;
       }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadMessage('❌ Upload failed: Network error');
-    } finally {
-      setIsUploading(false);
+      // 2. Send extracted text to backend
+      const sessionId = window.localStorage.getItem('sessionId') || Math.random().toString(36).substring(2);
+      window.localStorage.setItem('sessionId', sessionId);
+      const response = await fetch('http://localhost:3001/upload-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          filename: file.name,
+          text: extractedText
+        })
+      });
+      if (response.ok) {
+        setUploadMessage('✅ File uploaded and text stored for this session!');
+      } else {
+        setUploadMessage('❌ Upload failed: ' + (await response.text()));
+      }
+    } catch (err) {
+      setUploadMessage('❌ Upload failed: ' + (err as Error).message);
+    }
+    setIsUploading(false);
+  };
+
+  // Add a wrapper for the upload button
+  const handleUploadClick = () => {
+    if (selectedFile) {
+      handleUpload(selectedFile);
     }
   };
 
@@ -84,7 +91,7 @@ export default function InfoPage() {
           </div>
 
           <button 
-            onClick={handleUpload}
+            onClick={handleUploadClick}
             disabled={!selectedFile || isUploading}
             className="upload-button"
           >
