@@ -104,13 +104,10 @@ const userMessages = new Map();
 // Track webhook processing to prevent race conditions
 const webhookQueue = new Map(); // conversationId -> processing status
 
-// In-memory store for uploaded texts by session
-const userDocs = {}; // { sessionId: [ { filename, text } ] }
-
 app.post('/api/user', async (req, res) => {
   try {
     const response = await fetch(`${BASE_URL}/users`, {
-      method: '',
+      method: 'POST',
       headers: {
         'accept': 'application/json',
         'Content-Type': 'application/json'
@@ -1819,47 +1816,3 @@ app.listen(PORT, () => {
   console.log(`🔧 Debug endpoint: http://localhost:${PORT}/api/debug/stored-responses`);
   console.log(`🔑 Token test: http://localhost:${PORT}/api/test-specific-token`);
 }); 
-
-// Endpoint to receive and store extracted text
-app.post('/upload-text', (req, res) => {
-  const { sessionId, filename, text } = req.body;
-  if (!sessionId || !filename || !text) {
-    return res.status(400).json({ error: 'Missing sessionId, filename, or text' });
-  }
-  if (!userDocs[sessionId]) userDocs[sessionId] = [];
-  userDocs[sessionId].push({ filename, text });
-  res.json({ success: true });
-});
-
-// Endpoint to search uploaded texts for a session
-app.post('/search', (req, res) => {
-  const { sessionId, question } = req.body;
-  if (!sessionId || !question) {
-    return res.status(400).json({ error: 'Missing sessionId or question' });
-  }
-  const docs = userDocs[sessionId] || [];
-  // Simple keyword search (replace with embeddings for better results)
-  let bestMatch = null;
-  let bestScore = 0;
-  for (const doc of docs) {
-    const score = doc.text.split(' ').filter(word => question.includes(word)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = doc;
-    }
-  }
-  res.json({
-    answer: bestMatch ? `From ${bestMatch.filename}: ${bestMatch.text}` : "Sorry, I couldn't find an answer in your uploaded documents."
-  });
-}); 
-
-// Support both POST and PUT for /upload-text
-app.put('/upload-text', (req, res) => {
-  const { sessionId, filename, text } = req.body;
-  if (!sessionId || !filename || !text) {
-    return res.status(400).json({ error: 'Missing sessionId, filename, or text' });
-  }
-  if (!userDocs[sessionId]) userDocs[sessionId] = [];
-  userDocs[sessionId].push({ filename, text });
-  res.json({ success: true });
-});
