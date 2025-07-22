@@ -95,7 +95,7 @@ export default function InfoPage() {
             disabled={!selectedFile || isUploading}
             className="upload-button"
           >
-            {isUploading ? 'Uploading...' : 'Upload to Knowledge Base'}
+            {isUploading ? 'Uploading...' : 'Upload Document'}
           </button>
 
           {uploadMessage && (
