@@ -1216,6 +1216,132 @@ app.get('/api/check-bot-config', async (req, res) => {
   }
 });
 
+// Comprehensive API Discovery
+app.get('/api/discover-apis', async (req, res) => {
+  try {
+    console.log('🔍 Comprehensive API Discovery...');
+    
+    const results = {};
+    
+    // Test 1: Check what APIs are available
+    console.log(`🔍 Test 1: Check available APIs...`);
+    const apiEndpoints = [
+      // Core APIs
+      { name: 'files', url: 'https://api.botpress.cloud/v1/files' },
+      { name: 'bots', url: `https://api.botpress.cloud/v1/bots/${BOT_ID}` },
+      { name: 'workspaces', url: `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}` },
+      { name: 'users', url: 'https://api.botpress.cloud/v1/users/me' },
+      
+      // Knowledge Base APIs (v1)
+      { name: 'kb_list_v1', url: 'https://api.botpress.cloud/v1/knowledge-bases' },
+      { name: 'kb_create_v1', url: 'https://api.botpress.cloud/v1/knowledge-bases', method: 'POST' },
+      
+      // Knowledge Base APIs (v3)
+      { name: 'kb_list_v3', url: 'https://api.botpress.cloud/v3/knowledge-bases' },
+      { name: 'kb_create_v3', url: 'https://api.botpress.cloud/v3/knowledge-bases', method: 'POST' },
+      
+      // Alternative knowledge base endpoints
+      { name: 'kb_bot_v1', url: `https://api.botpress.cloud/v1/bots/${BOT_ID}/knowledge-bases` },
+      { name: 'kb_workspace_v1', url: `https://api.botpress.cloud/v1/workspaces/${WORKSPACE_ID}/knowledge-bases` },
+      
+      // Other potential APIs
+      { name: 'conversations', url: 'https://api.botpress.cloud/v1/conversations' },
+      { name: 'messages', url: 'https://api.botpress.cloud/v1/messages' },
+      { name: 'integrations', url: 'https://api.botpress.cloud/v1/integrations' },
+      { name: 'modules', url: `https://api.botpress.cloud/v1/bots/${BOT_ID}/modules` },
+      { name: 'features', url: `https://api.botpress.cloud/v1/bots/${BOT_ID}/features` }
+    ];
+    
+    for (const endpoint of apiEndpoints) {
+      console.log(`🔍 Testing: ${endpoint.name} (${endpoint.url})`);
+      try {
+        const config = {
+          headers: {
+            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        };
+        
+        let response;
+        if (endpoint.method === 'POST') {
+          response = await axios.post(endpoint.url, {}, config);
+        } else {
+          response = await axios.get(endpoint.url, config);
+        }
+        
+        results[endpoint.name] = { 
+          status: response.status, 
+          success: true,
+          data: response.data,
+          url: endpoint.url
+        };
+        console.log(`✅ ${endpoint.name} works: ${response.status}`);
+      } catch (error) {
+        results[endpoint.name] = { 
+          error: error.response?.status || error.message,
+          success: false,
+          url: endpoint.url
+        };
+        console.log(`❌ ${endpoint.name} failed: ${error.response?.status || error.message}`);
+      }
+    }
+    
+    // Test 2: Check subscription/plan info
+    console.log(`🔍 Test 2: Check subscription info...`);
+    try {
+      const subscriptionResponse = await axios.get('https://api.botpress.cloud/v1/subscription', {
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      results.subscription = { status: subscriptionResponse.status, data: subscriptionResponse.data };
+      console.log(`✅ Subscription info:`, subscriptionResponse.data);
+    } catch (error) {
+      results.subscription = { error: error.response?.status || error.message };
+      console.log(`❌ Subscription info failed:`, error.response?.status || error.message);
+    }
+    
+    // Test 3: Check what features are available
+    console.log(`🔍 Test 3: Check available features...`);
+    try {
+      const featuresResponse = await axios.get('https://api.botpress.cloud/v1/features', {
+        headers: {
+          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      results.features = { status: featuresResponse.status, data: featuresResponse.data };
+      console.log(`✅ Features info:`, featuresResponse.data);
+    } catch (error) {
+      results.features = { error: error.response?.status || error.message };
+      console.log(`❌ Features info failed:`, error.response?.status || error.message);
+    }
+    
+    res.json({ 
+      success: true,
+      message: 'Comprehensive API Discovery completed',
+      results: results,
+      summary: {
+        workingApis: Object.keys(results).filter(key => results[key].success),
+        failingApis: Object.keys(results).filter(key => !results[key].success),
+        totalApis: Object.keys(results).length
+      },
+      config: {
+        botId: BOT_ID,
+        workspaceId: WORKSPACE_ID,
+        tokenPreview: BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message
+    });
+  }
+});
+
 // Test specific token endpoint
 app.get('/api/test-specific-token', async (req, res) => {
   try {
