@@ -33,11 +33,11 @@ export default function InfoPage() {
         setIsUploading(false);
         return;
       }
-      // 2. Send extracted text to backend
+      // 2. Send extracted text to backend using PUT
       const sessionId = window.localStorage.getItem('sessionId') || Math.random().toString(36).substring(2);
       window.localStorage.setItem('sessionId', sessionId);
       const response = await fetch('http://localhost:3001/upload-text', {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
@@ -48,10 +48,10 @@ export default function InfoPage() {
       if (response.ok) {
         setUploadMessage('✅ File uploaded and text stored for this session!');
       } else {
-        setUploadMessage('❌ Upload failed: ' + (await response.text()));
+        setUploadMessage('❌ Upload failed.');
       }
     } catch (err) {
-      setUploadMessage('❌ Upload failed: ' + (err as Error).message);
+      setUploadMessage('❌ Upload failed.');
     }
     setIsUploading(false);
   };
@@ -95,7 +95,7 @@ export default function InfoPage() {
             disabled={!selectedFile || isUploading}
             className="upload-button"
           >
-            {isUploading ? 'Uploading...' : 'Upload Document'}
+            {isUploading ? 'Uploading...' : 'Upload to Knowledge Base'}
           </button>
 
           {uploadMessage && (

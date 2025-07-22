@@ -1852,3 +1852,14 @@ app.post('/search', (req, res) => {
     answer: bestMatch ? `From ${bestMatch.filename}: ${bestMatch.text}` : "Sorry, I couldn't find an answer in your uploaded documents."
   });
 }); 
+
+// Support both POST and PUT for /upload-text
+app.put('/upload-text', (req, res) => {
+  const { sessionId, filename, text } = req.body;
+  if (!sessionId || !filename || !text) {
+    return res.status(400).json({ error: 'Missing sessionId, filename, or text' });
+  }
+  if (!userDocs[sessionId]) userDocs[sessionId] = [];
+  userDocs[sessionId].push({ filename, text });
+  res.json({ success: true });
+});
