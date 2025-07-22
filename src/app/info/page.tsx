@@ -36,7 +36,7 @@ export default function InfoPage() {
       // 2. Send extracted text to backend
       const sessionId = window.localStorage.getItem('sessionId') || Math.random().toString(36).substring(2);
       window.localStorage.setItem('sessionId', sessionId);
-      const response = await fetch('http://localhost:3001/upload-text', {
+      const response = await fetch('https://n8n-chatbot-0d8lon.render.com/upload-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

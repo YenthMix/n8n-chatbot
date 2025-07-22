@@ -110,7 +110,7 @@ const userDocs = {}; // { sessionId: [ { filename, text } ] }
 app.post('/api/user', async (req, res) => {
   try {
     const response = await fetch(`${BASE_URL}/users`, {
-      method: 'POST',
+      method: '',
       headers: {
         'accept': 'application/json',
         'Content-Type': 'application/json'
