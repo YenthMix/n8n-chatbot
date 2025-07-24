@@ -1,33 +1,37 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useEffect } from 'react';
 
 export default function InfoPage() {
   const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
-  const [kbDocuments, setKbDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
 
-  // Fetch KB documents
-  const fetchKbDocuments = async () => {
+  const fetchDocuments = async () => {
+    setLoadingDocs(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/kb-documents`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/documents`);
       const data = await response.json();
-      if (data.success && Array.isArray(data.documents)) {
-        setKbDocuments(data.documents);
-      } else if (data.success && data.documents && Array.isArray(data.documents.documents)) {
-        setKbDocuments(data.documents.documents);
+      if (data.success && data.documents && Array.isArray(data.documents)) {
+        setDocuments(data.documents);
+      } else if (data.success && data.documents && data.documents.documents) {
+        setDocuments(data.documents.documents);
       } else {
-        setKbDocuments([]);
+        setDocuments([]);
       }
-    } catch (error) {
-      setKbDocuments([]);
+    } catch (e) {
+      setDocuments([]);
+    } finally {
+      setLoadingDocs(false);
     }
   };
 
   useEffect(() => {
-    fetchKbDocuments();
+    fetchDocuments();
   }, []);
 
   const handleBackToChat = () => {
@@ -44,7 +48,6 @@ export default function InfoPage() {
 
   const handleUpload = async () => {
     if (!selectedFile) {
-      // Always show success message even if no file is selected
       setUploadMessage('✅ File uploaded successfully to knowledge base!');
       return;
     }
@@ -61,11 +64,9 @@ export default function InfoPage() {
         body: formData,
       });
       setSelectedFile(null);
-      // Reset file input
       const fileInput = document.getElementById('file-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
-      // Refresh KB documents after upload
-      fetchKbDocuments();
+      await fetchDocuments(); // Refresh document list after upload
     } catch (error) {
       // Do nothing, always show success
     } finally {
@@ -74,7 +75,7 @@ export default function InfoPage() {
   };
 
   return (
-    <div className="upload-container">
+    <div className="upload-container" style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' }}>
       <button 
         onClick={handleBackToChat}
         className="back-button"
@@ -82,54 +83,56 @@ export default function InfoPage() {
         ← Back to Chat
       </button>
 
-      <div className="upload-content" style={{ display: 'flex', flexDirection: 'row', gap: '40px', justifyContent: 'center' }}>
-        <div style={{ flex: 1 }}>
-          <h1>📄 Upload Document</h1>
-          <p>Upload a document to the knowledge base for better chat assistance</p>
-          <div className="upload-form">
-            <div className="file-input-container">
-              <input
-                type="file"
-                id="file-input"
-                accept=".pdf,.txt,.docx,.doc"
-                onChange={handleFileSelect}
-                className="file-input"
-              />
-              <label htmlFor="file-input" className="file-input-label">
-                {selectedFile ? selectedFile.name : 'Choose a file (.pdf, .txt, .docx)'}
-              </label>
-            </div>
-            <button 
-              onClick={handleUpload}
-              disabled={!selectedFile || isUploading}
-              className="upload-button"
-            >
-              {isUploading ? 'Uploading...' : 'Upload to Knowledge Base'}
-            </button>
-            {uploadMessage && (
-              <div className={`upload-message success`}>
-                {uploadMessage}
-              </div>
-            )}
+      <div className="upload-content">
+        <h1>📄 Upload Document</h1>
+        <p>Upload a document to the knowledge base for better chat assistance</p>
+        <div className="upload-form">
+          <div className="file-input-container">
+            <input
+              type="file"
+              id="file-input"
+              accept=".pdf,.txt,.docx,.doc"
+              onChange={handleFileSelect}
+              className="file-input"
+            />
+            <label htmlFor="file-input" className="file-input-label">
+              {selectedFile ? selectedFile.name : 'Choose a file (.pdf, .txt, .docx)'}
+            </label>
           </div>
-        </div>
-        <div style={{ flex: 1, background: '#fff', borderRadius: '16px', boxShadow: '0 2px 8px #f8bbd9', padding: '24px', minWidth: '280px', maxHeight: '420px', overflowY: 'auto' }}>
-          <h2 style={{ color: '#e91e63', fontSize: '20px', marginBottom: '16px' }}>📚 Knowledge Base Files</h2>
-          {kbDocuments.length === 0 ? (
-            <div style={{ color: '#888', fontStyle: 'italic' }}>No documents found.</div>
-          ) : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {kbDocuments.map((doc, idx) => (
-                <li key={doc.id || idx} style={{ marginBottom: '12px', borderBottom: '1px solid #f8bbd9', paddingBottom: '8px' }}>
-                  <div style={{ fontWeight: 600 }}>{doc.name || doc.title || doc.filename || 'Untitled'}</div>
-                  {doc.createdAt && (
-                    <div style={{ fontSize: '12px', color: '#888' }}>Uploaded: {new Date(doc.createdAt).toLocaleString()}</div>
-                  )}
-                </li>
-              ))}
-            </ul>
+
+          <button 
+            onClick={handleUpload}
+            disabled={!selectedFile || isUploading}
+            className="upload-button"
+          >
+            {isUploading ? 'Uploading...' : 'Upload to Knowledge Base'}
+          </button>
+
+          {uploadMessage && (
+            <div className={`upload-message success`}>
+              {uploadMessage}
+            </div>
           )}
         </div>
+      </div>
+
+      {/* File list on the right */}
+      <div style={{ marginLeft: 40, minWidth: 320, maxWidth: 400, background: 'white', borderRadius: 20, boxShadow: '0 8px 24px rgba(244,143,177,0.12)', padding: 24, height: 'fit-content' }}>
+        <h2 style={{ color: '#e91e63', fontSize: 22, marginBottom: 16 }}>📚 Documents</h2>
+        {loadingDocs ? (
+          <div>Loading documents...</div>
+        ) : documents.length === 0 ? (
+          <div>No documents found in the knowledge base.</div>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {documents.map((doc: any) => (
+              <li key={doc.id || doc.fileId} style={{ marginBottom: 12, padding: 10, border: '1px solid #f8bbd9', borderRadius: 10, background: '#fce4ec' }}>
+                <div style={{ fontWeight: 600 }}>{doc.name || doc.title || doc.fileName || doc.id}</div>
+                {doc.createdAt && <div style={{ fontSize: 12, color: '#888' }}>Added: {new Date(doc.createdAt).toLocaleString()}</div>}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
