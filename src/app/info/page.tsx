@@ -10,6 +10,8 @@ export default function InfoPage() {
   const [uploadMessage, setUploadMessage] = useState('');
   const [documents, setDocuments] = useState<any[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchDocuments = async () => {
     setLoadingDocs(true);
@@ -72,6 +74,21 @@ export default function InfoPage() {
     }
   };
 
+  const handleDelete = async (file: any) => {
+    setDeleting(true);
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/documents/${file.id || file.fileId}`, {
+        method: 'DELETE',
+      });
+      setDeleteTarget(null);
+      await fetchDocuments();
+    } catch (e) {
+      // Optionally show error
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="upload-container" style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' }}>
       <button 
@@ -124,22 +141,63 @@ export default function InfoPage() {
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {documents.map((doc: any) => (
-              <li key={doc.id || doc.fileId || doc.key} style={{ marginBottom: 12, padding: 10, border: '1px solid #f8bbd9', borderRadius: 10, background: '#fce4ec' }}>
-                <div style={{ fontWeight: 600 }}>{
-                   (() => {
-                     // If doc.key matches the pattern, strip the prefix
-                     const key = doc.key || '';
-                     const match = key.match(/^kb-[^/]+\/\d+-/);
-                     if (match) {
-                       return key.replace(/^kb-[^/]+\/\d+-/, '');
-                     }
-                     return doc.name || doc.title || doc.fileName || key || doc.id;
-                   })()
-                 }</div>
-                {doc.createdAt && <div style={{ fontSize: 12, color: '#888' }}>Added: {new Date(doc.createdAt).toLocaleString()}</div>}
+              <li key={doc.id || doc.fileId || doc.key} style={{ marginBottom: 12, padding: 10, border: '1px solid #f8bbd9', borderRadius: 10, background: '#fce4ec', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{
+                    (() => {
+                      const key = doc.key || '';
+                      const match = key.match(/^kb-[^/]+\/\d+-/);
+                      if (match) {
+                        return key.replace(/^kb-[^/]+\/\d+-/, '');
+                      }
+                      return doc.name || doc.title || doc.fileName || key || doc.id;
+                    })()
+                  }</div>
+                  {doc.createdAt && <div style={{ fontSize: 12, color: '#888' }}>Added: {new Date(doc.createdAt).toLocaleString()}</div>}
+                </div>
+                <button
+                  style={{ background: 'none', border: 'none', color: '#e91e63', fontSize: 22, cursor: 'pointer', marginLeft: 10 }}
+                  title="Delete file"
+                  onClick={() => setDeleteTarget(doc)}
+                  disabled={deleting}
+                >
+                  ×
+                </button>
               </li>
             ))}
           </ul>
+        )}
+        {/* Confirmation Dialog */}
+        {deleteTarget && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 32, minWidth: 320, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', textAlign: 'center' }}>
+              <div style={{ fontSize: 18, marginBottom: 18 }}>Do you really want to delete this file?</div>
+              <div style={{ marginBottom: 24, fontWeight: 600 }}>
+                {(() => {
+                  const key = deleteTarget.key || '';
+                  const match = key.match(/^kb-[^/]+\/\d+-/);
+                  if (match) {
+                    return key.replace(/^kb-[^/]+\/\d+-/, '');
+                  }
+                  return deleteTarget.name || deleteTarget.title || deleteTarget.fileName || key || deleteTarget.id;
+                })()}
+              </div>
+              <button
+                onClick={() => handleDelete(deleteTarget)}
+                disabled={deleting}
+                style={{ background: '#e91e63', color: 'white', border: 'none', borderRadius: 8, padding: '8px 24px', fontWeight: 600, marginRight: 16, cursor: 'pointer', fontSize: 16 }}
+              >
+                {deleting ? 'Deleting...' : 'Yes'}
+              </button>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                style={{ background: '#f8bbd9', color: '#e91e63', border: 'none', borderRadius: 8, padding: '8px 24px', fontWeight: 600, cursor: 'pointer', fontSize: 16 }}
+              >
+                No
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

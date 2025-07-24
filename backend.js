@@ -1795,3 +1795,25 @@ app.get('/api/documents', async (req, res) => {
     res.status(500).json({ success: false, error: error.message, details: error.response?.data });
   }
 }); 
+
+// Delete a file from the knowledge base
+app.delete('/api/documents/:fileId', async (req, res) => {
+  const { fileId } = req.params;
+  try {
+    const deleteRes = await axios.delete(`https://api.botpress.cloud/v1/files/${fileId}`, {
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      }
+    });
+    res.json({ success: true, result: deleteRes.data });
+  } catch (error) {
+    if (error.response) {
+      console.error('Botpress API delete error:', error.response.status, error.response.data, error.response.headers);
+    } else {
+      console.error('Botpress API delete error:', error.message);
+    }
+    res.status(500).json({ success: false, error: error.message, details: error.response?.data });
+  }
+});
