@@ -125,7 +125,17 @@ export default function InfoPage() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {documents.map((doc: any) => (
               <li key={doc.id || doc.fileId || doc.key} style={{ marginBottom: 12, padding: 10, border: '1px solid #f8bbd9', borderRadius: 10, background: '#fce4ec' }}>
-                <div style={{ fontWeight: 600 }}>{doc.name || doc.title || doc.fileName || doc.key || doc.id}</div>
+                <div style={{ fontWeight: 600 }}>{
+                   (() => {
+                     // If doc.key matches the pattern, strip the prefix
+                     const key = doc.key || '';
+                     const match = key.match(/^kb-[^/]+\/\d+-/);
+                     if (match) {
+                       return key.replace(/^kb-[^/]+\/\d+-/, '');
+                     }
+                     return doc.name || doc.title || doc.fileName || key || doc.id;
+                   })()
+                 }</div>
                 {doc.createdAt && <div style={{ fontSize: 12, color: '#888' }}>Added: {new Date(doc.createdAt).toLocaleString()}</div>}
               </li>
             ))}
