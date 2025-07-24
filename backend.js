@@ -686,145 +686,96 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     console.log(`📁 File upload received: ${req.file.originalname} (${req.file.size} bytes)`);
     console.log(`📁 File type: ${req.file.mimetype}`);
     
-    // Debug environment variables
-    console.log(`🔍 DEBUG - Environment variables:`);
-    console.log(`   BOTPRESS_BEARER_TOKEN: ${process.env.BOTPRESS_BEARER_TOKEN ? process.env.BOTPRESS_BEARER_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
-    console.log(`   BOTPRESS_BOT_ID: ${process.env.BOTPRESS_BOT_ID || 'NOT SET'}`);
-    console.log(`   BOTPRESS_WORKSPACE_ID: ${process.env.BOTPRESS_WORKSPACE_ID || 'NOT SET'}`);
-    console.log(`   Using BOT_ID: ${BOT_ID}`);
-    console.log(`   Using WORKSPACE_ID: ${WORKSPACE_ID}`);
-    console.log(`   API_ID: ${API_ID || 'NOT SET'}`);
-
-    // Step 1: Register file and get uploadUrl
-    const fileKey = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    console.log(`🔍 DEBUG - Files API call:`);
-    console.log(`   URL: https://api.botpress.cloud/v1/files`);
-    console.log(`   Authorization: Bearer ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
-    console.log(`   x-bot-id: ${BOT_ID}`);
-    
+    // Step 1: Get or create knowledge base and determine kbId
+    let knowledgeBaseId = null;
     try {
-      const registerRes = await axios.put('https://api.botpress.cloud/v1/files', {
-        key: fileKey,
-        contentType: req.file.mimetype,
-        size: req.file.size,
-        index: true,
-        accessPolicies: ['public_content'],
-        tags: {
-          uploadedBy: 'webchat',
-          originalName: req.file.originalname
-        }
-      }, {
+      const kbListResponse = await axios.get('https://api.botpress.cloud/v1/knowledge-bases', {
         headers: {
           'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-          'x-bot-id': BOT_ID,
           'Content-Type': 'application/json'
         }
       });
-
-      const registerData = registerRes.data;
-      const fileObj = registerData.file || registerData;
-      const uploadUrl = fileObj.uploadUrl;
-      const fileId = fileObj.id;
-      if (!uploadUrl || !fileId) {
-        throw new Error('No uploadUrl or fileId in Botpress response');
-      }
-      console.log(`✅ File metadata registered. File ID: ${fileId}, Upload URL: ${uploadUrl}`);
-
-      // Step 2: Upload file content to uploadUrl
-      const uploadRes = await axios.put(uploadUrl, fs.readFileSync(req.file.path), {
-        headers: {
-          'Content-Type': req.file.mimetype
-        }
-      });
-      console.log(`✅ File content uploaded to storage.`);
-
-      // Step 3: Add file to knowledge base
-      console.log(`📚 Adding file to knowledge base...`);
-      
-      // First, let's check what knowledge bases are available
-      console.log(`🔍 Checking available knowledge bases...`);
-      let knowledgeBaseId = null;
-      
-      try {
-        // Try to list knowledge bases
-        const kbListResponse = await axios.get('https://api.botpress.cloud/v1/knowledge-bases', {
+      if (kbListResponse.data && kbListResponse.data.length > 0) {
+        knowledgeBaseId = kbListResponse.data[0].id;
+        console.log(`✅ Found knowledge base: ${knowledgeBaseId}`);
+      } else {
+        console.log(`⚠️ No knowledge bases found, trying to create one...`);
+        const createKbResponse = await axios.post('https://api.botpress.cloud/v1/knowledge-bases', {
+          name: 'Documents',
+          description: 'Knowledge base for uploaded documents'
+        }, {
           headers: {
             'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
             'Content-Type': 'application/json'
           }
         });
-        
-        if (kbListResponse.data && kbListResponse.data.length > 0) {
-          // Use the first available knowledge base
-          knowledgeBaseId = kbListResponse.data[0].id;
-          console.log(`✅ Found knowledge base: ${knowledgeBaseId}`);
-        } else {
-          console.log(`⚠️ No knowledge bases found, trying to create one...`);
-          // Try to create a knowledge base
-          const createKbResponse = await axios.post('https://api.botpress.cloud/v1/knowledge-bases', {
-            name: 'Documents',
-            description: 'Knowledge base for uploaded documents'
-          }, {
-            headers: {
-              'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          knowledgeBaseId = createKbResponse.data.id;
-          console.log(`✅ Created new knowledge base: ${knowledgeBaseId}`);
-        }
-      } catch (error) {
-        console.log(`❌ Failed to get/create knowledge base:`, error.response?.status || error.message);
-        // Fall back to the hardcoded ID
-        knowledgeBaseId = 'kb-bfdcb1988f';
-        console.log(`🔄 Falling back to hardcoded knowledge base ID: ${knowledgeBaseId}`);
+        knowledgeBaseId = createKbResponse.data.id;
+        console.log(`✅ Created new knowledge base: ${knowledgeBaseId}`);
       }
-      
-      console.log(`🔍 DEBUG - Knowledge Base API call:`);
-      console.log(`   URL: https://api.botpress.cloud/v3/knowledge-bases/${knowledgeBaseId}/documents`);
-      console.log(`   Authorization: Bearer ${BOTPRESS_API_TOKEN ? BOTPRESS_API_TOKEN.substring(0, 20) + '...' : 'NOT SET'}`);
-      console.log(`   x-bot-id: ${BOT_ID}`);
-      console.log(`   Request body:`, {
-        name: req.file.originalname,
-        type: 'file',
-        fileId: fileId,
-        workspaceId: WORKSPACE_ID
-      });
-
-      const knowledgeBaseResponse = await axios.post(`https://api.botpress.cloud/v3/knowledge-bases/${knowledgeBaseId}/documents`, {
-        name: req.file.originalname,
-        type: 'file',
-        fileId: fileId,
-        workspaceId: WORKSPACE_ID
-      }, {
-        headers: {
-          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-          'x-bot-id': BOT_ID,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const kbData = knowledgeBaseResponse.data;
     } catch (error) {
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error(`❌ API Error: ${error.response.status} - ${error.response.statusText}`);
-        console.error(`❌ Response data:`, error.response.data);
-        console.error(`❌ Response headers:`, error.response.headers);
-        throw new Error(`${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error(`❌ No response received:`, error.request);
-        throw new Error('No response received from server');
-      } else {
-        // Something happened in setting up the request that triggered an Error
-        console.error(`❌ Request setup error:`, error.message);
-        throw new Error(`Request error: ${error.message}`);
-      }
+      console.log(`❌ Failed to get/create knowledge base:`, error.response?.status || error.message);
+      knowledgeBaseId = 'kb-bfdcb1988f';
+      console.log(`🔄 Falling back to hardcoded knowledge base ID: ${knowledgeBaseId}`);
     }
+
+    // Step 2: Register file and get uploadUrl with new key and tags
+    const timestamp = Date.now();
+    const filename = req.file.originalname;
+    const fileKey = `kb-${knowledgeBaseId}/${timestamp}-${filename}`;
+    const title = req.body.title || filename;
+    
+    const registerRes = await axios.put('https://api.botpress.cloud/v1/files', {
+      key: fileKey,
+      contentType: req.file.mimetype,
+      size: req.file.size,
+      index: true,
+      accessPolicies: ['public_content'],
+      tags: {
+        source: 'knowledge-base',
+        kbId: knowledgeBaseId,
+        title: title,
+        category: 'support',
+        uploadedVia: 'api'
+      }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const registerData = registerRes.data;
+    const fileObj = registerData.file || registerData;
+    const uploadUrl = fileObj.uploadUrl;
+    const fileId = fileObj.id;
+    if (!uploadUrl || !fileId) {
+      throw new Error('No uploadUrl or fileId in Botpress response');
+    }
+    console.log(`✅ File metadata registered. File ID: ${fileId}, Upload URL: ${uploadUrl}`);
+
+    // Step 3: Upload file content to uploadUrl
+    await axios.put(uploadUrl, fs.readFileSync(req.file.path), {
+      headers: {
+        'Content-Type': req.file.mimetype
+      }
+    });
+    console.log(`✅ File content uploaded to storage.`);
+
+    // Step 4: Add file to knowledge base
+    const knowledgeBaseResponse = await axios.post(`https://api.botpress.cloud/v3/knowledge-bases/${knowledgeBaseId}/documents`, {
+      name: filename,
+      type: 'file',
+      fileId: fileId,
+      workspaceId: WORKSPACE_ID
+    }, {
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      }
+    });
+    const kbData = knowledgeBaseResponse.data;
     console.log(`✅ File added to knowledge base successfully! Document ID: ${kbData.id || 'N/A'}`);
 
     // Clean up temporary file
@@ -836,11 +787,10 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       message: 'File uploaded to knowledge base successfully',
       fileId: fileId,
       documentId: kbData.id,
-      fileName: req.file.originalname
+      fileName: filename
     });
   } catch (error) {
     console.error('❌ File upload error:', error);
-    // Clean up temporary file on error
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
       console.log(`🧹 Cleaned up temporary file after error: ${req.file.path}`);
