@@ -1805,6 +1805,7 @@ app.get('/api/documents', async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
+    console.log('Botpress KB documents response:', docsRes.data); // Log the raw response
     res.json({ success: true, documents: docsRes.data });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
