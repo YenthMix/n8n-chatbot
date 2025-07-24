@@ -16,10 +16,8 @@ export default function InfoPage() {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/documents`);
       const data = await response.json();
-      if (data.success && data.documents && Array.isArray(data.documents)) {
-        setDocuments(data.documents);
-      } else if (data.success && data.documents && data.documents.documents) {
-        setDocuments(data.documents.documents);
+      if (data.success && data.files && Array.isArray(data.files)) {
+        setDocuments(data.files);
       } else {
         setDocuments([]);
       }
@@ -126,8 +124,8 @@ export default function InfoPage() {
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {documents.map((doc: any) => (
-              <li key={doc.id || doc.fileId} style={{ marginBottom: 12, padding: 10, border: '1px solid #f8bbd9', borderRadius: 10, background: '#fce4ec' }}>
-                <div style={{ fontWeight: 600 }}>{doc.name || doc.title || doc.fileName || doc.id}</div>
+              <li key={doc.id || doc.fileId || doc.key} style={{ marginBottom: 12, padding: 10, border: '1px solid #f8bbd9', borderRadius: 10, background: '#fce4ec' }}>
+                <div style={{ fontWeight: 600 }}>{doc.name || doc.title || doc.fileName || doc.key || doc.id}</div>
                 {doc.createdAt && <div style={{ fontSize: 12, color: '#888' }}>Added: {new Date(doc.createdAt).toLocaleString()}</div>}
               </li>
             ))}

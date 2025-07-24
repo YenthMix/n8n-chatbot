@@ -1770,44 +1770,28 @@ app.listen(PORT, () => {
 // List documents in the first available knowledge base
 app.get('/api/documents', async (req, res) => {
   try {
-    // Get or create knowledge base and determine kbId (same logic as upload)
-    let knowledgeBaseId = null;
-    try {
-      const kbListResponse = await axios.get('https://api.botpress.cloud/v1/knowledge-bases', {
-        headers: {
-          'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (kbListResponse.data && kbListResponse.data.length > 0) {
-        knowledgeBaseId = kbListResponse.data[0].id;
-      } else {
-        const createKbResponse = await axios.post('https://api.botpress.cloud/v1/knowledge-bases', {
-          name: 'Documents',
-          description: 'Knowledge base for uploaded documents'
-        }, {
-          headers: {
-            'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        knowledgeBaseId = createKbResponse.data.id;
-      }
-    } catch (error) {
-      knowledgeBaseId = 'kb-bfdcb1988f';
-    }
-
-    // Fetch documents in the knowledge base
-    const docsRes = await axios.get(`https://api.botpress.cloud/v1/knowledge-bases/${knowledgeBaseId}/documents`, {
+    // List files with tags for knowledge base documents
+    const filesRes = await axios.get('https://api.botpress.cloud/v1/files', {
       headers: {
         'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
         'x-bot-id': BOT_ID,
         'Content-Type': 'application/json'
+      },
+      params: {
+        'tags[category]': 'support',
+        'tags[source]': 'knowledge-base',
+        limit: 100
       }
     });
-    console.log('Botpress KB documents response:', docsRes.data); // Log the raw response
-    res.json({ success: true, documents: docsRes.data });
+    const files = filesRes.data.files || filesRes.data;
+    console.log('Botpress KB files response:', files);
+    res.json({ success: true, files });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    if (error.response) {
+      console.error('Botpress API error:', error.response.status, error.response.data, error.response.headers);
+    } else {
+      console.error('Botpress API error:', error.message);
+    }
+    res.status(500).json({ success: false, error: error.message, details: error.response?.data });
   }
 }); 
