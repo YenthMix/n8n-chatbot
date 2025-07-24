@@ -1765,4 +1765,34 @@ app.listen(PORT, () => {
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔧 Debug endpoint: http://localhost:${PORT}/api/debug/stored-responses`);
   console.log(`🔑 Token test: http://localhost:${PORT}/api/test-specific-token`);
+});
+
+// List all documents in the first available knowledge base
+app.get('/api/kb-documents', async (req, res) => {
+  try {
+    // Get the list of knowledge bases
+    const kbListResponse = await axios.get('https://api.botpress.cloud/v1/knowledge-bases', {
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const kbList = kbListResponse.data;
+    if (!kbList || kbList.length === 0) {
+      return res.status(404).json({ error: 'No knowledge bases found' });
+    }
+    const kbId = kbList[0].id;
+    // Get the documents in the knowledge base
+    const docsResponse = await axios.get(`https://api.botpress.cloud/v1/knowledge-bases/${kbId}/documents`, {
+      headers: {
+        'Authorization': `Bearer ${BOTPRESS_API_TOKEN}`,
+        'x-bot-id': BOT_ID,
+        'Content-Type': 'application/json'
+      }
+    });
+    res.json({ success: true, documents: docsResponse.data });
+  } catch (error) {
+    console.error('❌ Error fetching KB documents:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch KB documents' });
+  }
 }); 
