@@ -44,6 +44,8 @@ export default function InfoPage() {
         // Reset file input
         const fileInput = document.getElementById('file-input') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
+        // Clear any previous error message
+        setTimeout(() => setUploadMessage(''), 2000);
       } else {
         const errorData = await response.json();
         setUploadMessage(`❌ Upload failed: ${errorData.error || 'Unknown error'}`);
@@ -91,11 +93,7 @@ export default function InfoPage() {
             {isUploading ? 'Uploading...' : 'Upload to Knowledge Base'}
           </button>
 
-          {uploadMessage && (
-            <div className={`upload-message ${uploadMessage.includes('✅') ? 'success' : uploadMessage.includes('❌') ? 'error' : 'info'}`}>
-              {uploadMessage}
-            </div>
-          )}
+          {/* Remove upload message display */}
         </div>
       </div>
     </div>
