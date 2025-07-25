@@ -90,7 +90,7 @@ export default function InfoPage() {
   };
 
   return (
-    <div className="upload-container" style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' }}>
+    <div className="upload-container">
       <button 
         onClick={handleBackToChat}
         className="back-button"
@@ -132,7 +132,7 @@ export default function InfoPage() {
       </div>
 
       {/* File list on the right */}
-      <div style={{ marginLeft: 40, minWidth: 320, maxWidth: 400, background: 'white', borderRadius: 20, boxShadow: '0 8px 24px rgba(244,143,177,0.12)', padding: 24, height: 'fit-content' }}>
+      <div className="documents-box">
         <h2 style={{ color: '#e91e63', fontSize: 22, marginBottom: 16 }}>📚 Documents</h2>
         {loadingDocs ? (
           <div>Loading documents...</div>

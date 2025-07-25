@@ -267,13 +267,7 @@ body {
   justify-content: center;
   align-items: center;
   padding: 20px;
-  flex-direction: row;
-  gap: 40px;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
 }
 
 .upload-content {
@@ -285,6 +279,22 @@ body {
   max-width: 500px;
   width: 100%;
   margin: 0 auto;
+  z-index: 2;
+}
+
+.documents-box {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 40px;
+  min-width: 320px;
+  max-width: 400px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(244,143,177,0.12);
+  padding: 24px;
+  height: fit-content;
+  z-index: 3;
 }
 
 .upload-content h1 {
