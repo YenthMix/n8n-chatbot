@@ -6,7 +6,7 @@
 
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: #f8bbd9; /* Changed from gradient to solid color to remove weird lines */
+  background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 50%, #f48fb1 100%); /* Restore gradient */
   min-height: 100vh;
   display: flex;
   justify-content: center;
@@ -260,7 +260,7 @@ body {
 
 /* Upload page styles */
 .upload-container {
-  background: none; /* Remove gradient background */
+  background: none;
   min-height: 100vh;
   width: 100vw;
   display: flex;
@@ -269,6 +269,11 @@ body {
   padding: 20px;
   flex-direction: row;
   gap: 40px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .upload-content {
