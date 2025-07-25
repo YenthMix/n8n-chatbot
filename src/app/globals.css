@@ -265,10 +265,12 @@ body {
   width: 100vw;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   padding: 20px;
   position: relative;
   flex-direction: row;
+  /* Ensure top alignment of both boxes */
+  align-items: flex-start;
 }
 
 .upload-content {
@@ -298,6 +300,7 @@ body {
   padding: 24px;
   height: fit-content;
   z-index: 3;
+  align-items: center;
 }
 
 .upload-content h1 {
